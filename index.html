@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radiology Case Log Tracker</title>
+<style>
+  :root {
+    --blue: #1f4e79;
+    --blue-light: #2c6cad;
+    --blue-pale: #eaf2fb;
+    --gray: #5a6776;
+    --gray-light: #f4f6f9;
+    --border: #d8dee6;
+    --green: #2e9e5b;
+    --green-bg: #e3f5ea;
+    --yellow: #c8920a;
+    --yellow-bg: #fdf4dd;
+    --red: #c0392b;
+    --red-bg: #fbe6e3;
+    --shadow: 0 1px 3px rgba(31,78,121,.08), 0 1px 2px rgba(31,78,121,.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #f7f9fc;
+    color: #243140;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .hidden { display: none !important; }
+
+  /* Header */
+  header {
+    background: var(--blue);
+    color: #fff;
+    padding: 14px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow);
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header .brand { display: flex; align-items: center; gap: 11px; font-size: 19px; font-weight: 600; }
+  header .brand .logo {
+    width: 32px; height: 32px; border-radius: 7px; background: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  header .userbox { display: flex; align-items: center; gap: 14px; font-size: 14px; }
+  header .userbox .who { opacity: .92; }
+  header .userbox .who strong { font-weight: 600; }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    border-radius: 7px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background .15s, opacity .15s;
+  }
+  .btn-primary { background: var(--blue-light); color: #fff; padding: 10px 18px; }
+  .btn-primary:hover { background: var(--blue); }
+  .btn-ghost { background: rgba(255,255,255,.15); color: #fff; padding: 8px 14px; }
+  .btn-ghost:hover { background: rgba(255,255,255,.28); }
+  .btn-danger { background: var(--red); color: #fff; padding: 9px 16px; }
+  .btn-danger:hover { background: #a5301f; }
+  .btn-secondary { background: #e7ecf3; color: var(--blue); padding: 9px 16px; }
+  .btn-secondary:hover { background: #dae2ec; }
+
+  /* Login */
+  .login-wrap {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .login-card {
+    background: #fff; border-radius: 14px; box-shadow: 0 8px 30px rgba(31,78,121,.12);
+    padding: 38px 34px; width: 100%; max-width: 380px; text-align: center;
+  }
+  .login-card .logo-big {
+    width: 60px; height: 60px; border-radius: 14px; background: var(--blue-pale);
+    display: flex; align-items: center; justify-content: center; font-size: 32px; margin: 0 auto 16px;
+  }
+  .login-card h1 { font-size: 22px; color: var(--blue); margin-bottom: 4px; }
+  .login-card .sub { color: var(--gray); font-size: 14px; margin-bottom: 26px; }
+  .field { text-align: left; margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; color: var(--gray); margin-bottom: 6px; }
+  .field select, .field input {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 15px; font-family: inherit; background: #fff; color: #243140;
+  }
+  .field select:focus, .field input:focus { outline: none; border-color: var(--blue-light); box-shadow: 0 0 0 3px var(--blue-pale); }
+  .login-card .btn-primary { width: 100%; padding: 12px; margin-top: 6px; }
+  .login-err { color: var(--red); font-size: 13px; margin-top: 12px; min-height: 16px; }
+  .login-hint { color: #9aa6b3; font-size: 12px; margin-top: 18px; }
+
+  /* Layout */
+  main { max-width: 1180px; margin: 0 auto; padding: 26px 22px 60px; }
+  .page-title { font-size: 22px; color: var(--blue); margin-bottom: 4px; font-weight: 600; }
+  .page-sub { color: var(--gray); font-size: 14px; margin-bottom: 22px; }
+
+  .card {
+    background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 22px; margin-bottom: 22px;
+  }
+  .card h2 { font-size: 16px; color: var(--blue); margin-bottom: 16px; font-weight: 600; display:flex; align-items:center; gap:8px; }
+  .card h2 .pill { font-size: 12px; font-weight: 600; background: var(--blue-pale); color: var(--blue-light); padding: 2px 9px; border-radius: 20px; }
+
+  /* Import zones */
+  .import-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 720px) { .import-grid { grid-template-columns: 1fr; } }
+  .dropzone {
+    border: 2px dashed var(--border); border-radius: 10px; padding: 30px 18px; text-align: center;
+    color: var(--gray); background: var(--gray-light); transition: all .15s; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 150px;
+  }
+  .dropzone:hover { border-color: var(--blue-light); background: var(--blue-pale); }
+  .dropzone.dragover { border-color: var(--blue-light); background: var(--blue-pale); color: var(--blue); }
+  .dropzone .dz-icon { font-size: 30px; margin-bottom: 8px; }
+  .dropzone .dz-main { font-weight: 600; color: #34465a; }
+  .dropzone .dz-sub { font-size: 12.5px; margin-top: 4px; }
+  textarea#pasteZone {
+    width: 100%; min-height: 150px; border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; resize: vertical;
+  }
+  textarea#pasteZone:focus { outline: none; border-color: var(--blue-light); box-shadow: 0 0 0 3px var(--blue-pale); }
+  .import-actions { margin-top: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  .toast {
+    padding: 11px 15px; border-radius: 8px; font-size: 14px; margin-top: 14px;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .toast.ok { background: var(--green-bg); color: var(--green); }
+  .toast.warn { background: var(--yellow-bg); color: var(--yellow); }
+  .toast.err { background: var(--red-bg); color: var(--red); }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { color: var(--gray); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; background: var(--gray-light); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .table-scroll { overflow-x: auto; }
+
+  /* ACGME progress */
+  .acgme-row td { vertical-align: middle; }
+  .progress-cell { min-width: 200px; }
+  .progress-track { background: var(--gray-light); border-radius: 20px; height: 16px; overflow: hidden; border: 1px solid var(--border); }
+  .progress-fill { height: 100%; border-radius: 20px; transition: width .4s; }
+  .progress-fill.green { background: var(--green); }
+  .progress-fill.yellow { background: var(--yellow); }
+  .progress-fill.red { background: var(--red); }
+  .progress-label { font-size: 12.5px; color: var(--gray); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 14px; margin-bottom: 4px; }
+  .stat { background: var(--blue-pale); border-radius: 10px; padding: 16px; text-align: center; }
+  .stat .v { font-size: 26px; font-weight: 700; color: var(--blue); }
+  .stat .l { font-size: 12.5px; color: var(--gray); margin-top: 2px; }
+
+  .empty { text-align: center; color: #9aa6b3; padding: 30px; font-size: 14px; }
+
+  /* Director cells */
+  .cell-met { background: var(--green-bg); color: var(--green); font-weight: 600; }
+  .cell-mid { background: var(--yellow-bg); color: var(--yellow); font-weight: 600; }
+  .cell-low { background: var(--red-bg); color: var(--red); font-weight: 600; }
+  td.cat-cell { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
+  tr.resident-row { cursor: pointer; }
+  tr.resident-row:hover td { background: var(--blue-pale); }
+  tr.resident-row td:first-child { font-weight: 600; color: var(--blue); }
+  .expand-row td { background: var(--gray-light); padding: 0; }
+  .expand-inner { padding: 18px 22px; }
+  .expand-inner h3 { font-size: 14px; color: var(--blue); margin-bottom: 10px; }
+  .chev { display: inline-block; transition: transform .15s; color: var(--gray); margin-right: 6px; }
+  .chev.open { transform: rotate(90deg); }
+
+  .legend { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px; font-size:12.5px; color:var(--gray); }
+  .legend span { display:flex; align-items:center; gap:6px; }
+  .legend .dot { width:12px; height:12px; border-radius:3px; display:inline-block; }
+  .dot.green{background:var(--green);} .dot.yellow{background:var(--yellow);} .dot.red{background:var(--red);}
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(20,35,55,.45); display: flex; align-items: center;
+    justify-content: center; padding: 20px; z-index: 100;
+  }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 26px; max-width: 400px; width: 100%;
+    box-shadow: 0 12px 40px rgba(0,0,0,.2);
+  }
+  .modal h3 { color: var(--blue); font-size: 18px; margin-bottom: 8px; }
+  .modal p { color: var(--gray); font-size: 14px; margin-bottom: 20px; }
+  .modal .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div class="logo-big">🩻</div>
+    <h1>Radiology Case Log</h1>
+    <div class="sub">Resident exam tracking &amp; ACGME progress</div>
+    <div class="field">
+      <label for="userSelect">Select your name</label>
+      <select id="userSelect"></select>
+    </div>
+    <div class="field">
+      <label for="pinInput">4-digit PIN</label>
+      <input type="password" id="pinInput" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off">
+    </div>
+    <button class="btn-primary" id="loginBtn">Sign In</button>
+    <div class="login-err" id="loginErr"></div>
+    <div class="login-hint">Demo: all PINs are <strong>1234</strong></div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="hidden">
+  <header>
+    <div class="brand"><span class="logo">🩻</span> Radiology Case Log</div>
+    <div class="userbox">
+      <span class="who">Signed in as <strong id="hdrName"></strong> <span id="hdrRole"></span></span>
+      <button class="btn-ghost" id="logoutBtn">Sign Out</button>
+    </div>
+  </header>
+  <main id="content"></main>
+</div>
+
+<!-- Modal mount -->
+<div id="modalMount"></div>
+
+<script>
+/* ============================================================
+   DATA MODEL
+   ============================================================ */
+const RESIDENTS = [
+  "Resident 1","Resident 2","Resident 3","Resident 4","Resident 5","Resident 6"
+];
+const SPECIAL = ["Program Director","Program Coordinator"];
+
+// Build users with default PIN 1234
+const USERS = {};
+RESIDENTS.forEach(n => USERS[n] = { name:n, pin:"1234", role:"resident" });
+USERS["Program Director"]    = { name:"Program Director", pin:"1234", role:"director" };
+USERS["Program Coordinator"] = { name:"Program Coordinator", pin:"1234", role:"coordinator" };
+
+// ACGME requirements (order preserved). matchers = substrings (case-insensitive) that map a procedure to this category.
+const ACGME = [
+  { key:"Chest X-ray",                 min:1900, matchers:["CHEST","CXR","XR CHEST"] },
+  { key:"CT Abd/Pel",                  min:600,  matchers:["CT ABD","CT ABDOMEN","ABD/PEL","ABDOMEN/PELVIS","ABDOMEN AND PELVIS","CT PELVIS"] },
+  { key:"CTA/MRA",                     min:100,  matchers:["CTA","MRA","ANGIOGRAM","ANGIOGRAPHY"] },
+  { key:"Mammography",                 min:300,  matchers:["MAMMO","MAMMOGRAM","BREAST","TOMOSYNTHESIS"] },
+  { key:"MRI Body",                    min:20,   matchers:["MRI ABDOMEN","MRI ABD","MRI PELVIS","MR ABDOMEN","MRI BODY","MR ENTEROGRAPHY","MRCP"] },
+  { key:"MRI Brain",                   min:110,  matchers:["MRI BRAIN","MR BRAIN","BRAIN MRI","MRI HEAD","MR HEAD"] },
+  { key:"MRI Lower Extremity Joints",  min:20,   matchers:["MRI KNEE","MRI ANKLE","MRI HIP","MRI FOOT","MRI LOWER EXTREMITY","MR KNEE","MR ANKLE","MR HIP"] },
+  { key:"MRI Spine",                   min:60,   matchers:["MRI SPINE","MR SPINE","MRI LUMBAR","MRI CERVICAL","MRI THORACIC","LUMBAR SPINE","CERVICAL SPINE"] },
+  { key:"PET",                         min:30,   matchers:["PET"] },
+  { key:"US Abd/Pel",                  min:350,  matchers:["US ABD","US ABDOMEN","ULTRASOUND ABD","US PELVIS","US PELVIC","RETROPERITONEAL US","ABDOMINAL ULTRASOUND"] },
+  { key:"Image Guided Bx/Drainage",    min:25,   matchers:["BIOPSY","BX","DRAINAGE","DRAIN","ASPIRATION","PARACENTESIS","THORACENTESIS","IMAGE GUIDED"] },
+];
+
+// Column indices in the tab-separated Powerscribe data
+const COL = { ACCESSION:10, PROCEDURE:6, RESIDENT:13 };
+
+/* ============================================================
+   STORAGE
+   ============================================================ */
+const STORE_KEY = "radCaseLog_v1";
+function loadStore() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+  catch(e){ return {}; }
+}
+function saveStore(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+// Per-resident data: store[residentName] = { rows: [ {accession, procedure, resident, raw:[...]} ] }
+function getResidentData(name){
+  const s = loadStore();
+  return (s[name] && s[name].rows) ? s[name].rows : [];
+}
+function setResidentData(name, rows){
+  const s = loadStore();
+  s[name] = { rows };
+  saveStore(s);
+}
+
+/* ============================================================
+   SESSION
+   ============================================================ */
+let currentUser = null;
+
+/* ============================================================
+   ACGME / AGGREGATION HELPERS
+   ============================================================ */
+function categorize(procedure){
+  const p = (procedure||"").toUpperCase();
+  const hits = [];
+  for(const cat of ACGME){
+    if(cat.matchers.some(m => p.includes(m))) hits.push(cat.key);
+  }
+  return hits; // a procedure may count toward multiple categories
+}
+
+function procedureCounts(rows){
+  const map = {};
+  rows.forEach(r => {
+    const proc = r.procedure || "(blank)";
+    map[proc] = (map[proc]||0) + 1;
+  });
+  return map; // {procedure: count}
+}
+
+function acgmeCounts(rows){
+  const counts = {};
+  ACGME.forEach(c => counts[c.key] = 0);
+  rows.forEach(r => {
+    categorize(r.procedure).forEach(k => counts[k]++);
+  });
+  return counts; // {categoryKey: count}
+}
+
+function statusClass(count, min){
+  const pct = min === 0 ? 100 : (count/min)*100;
+  if(pct >= 100) return "green";
+  if(pct > 50) return "yellow";
+  return "red";
+}
+
+/* ============================================================
+   IMPORT / PARSE
+   ============================================================ */
+function parseRows(text){
+  const lines = text.split(/\r?\n/).map(l => l.replace(/\s+$/,"")).filter(l => l.trim() !== "");
+  const parsed = [];
+  for(const line of lines){
+    const cells = line.split("\t");
+    if(cells.length < 2) continue; // not tab-separated, skip
+    const accession = (cells[COL.ACCESSION]||"").trim();
+    const procedure = (cells[COL.PROCEDURE]||"").trim();
+    const resident  = (cells[COL.RESIDENT]||"").trim();
+    if(!accession) continue; // must have accession
+    // skip a header row if present
+    if(/^accession$/i.test(accession)) continue;
+    parsed.push({ accession, procedure, resident, raw: cells });
+  }
+  return parsed;
+}
+
+// Returns {added, duplicatesRemoved, totalAfter}
+function importForUser(name, text){
+  const incoming = parseRows(text);
+  const existing = getResidentData(name);
+  const seen = new Set(existing.map(r => r.accession));
+  let duplicatesRemoved = 0;
+  let added = 0;
+  const merged = existing.slice();
+  for(const row of incoming){
+    if(seen.has(row.accession)){ duplicatesRemoved++; continue; }
+    seen.add(row.accession);
+    merged.push(row);
+    added++;
+  }
+  setResidentData(name, merged);
+  return { added, duplicatesRemoved, totalAfter: merged.length, parsedCount: incoming.length };
+}
+
+/* ============================================================
+   RENDERING — shared
+   ============================================================ */
+const content = document.getElementById("content");
+function el(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ============================================================
+   RESIDENT SCREEN
+   ============================================================ */
+function renderResidentScreen(){
+  const name = currentUser.name;
+  content.innerHTML = `
+    <div class="page-title">My Case Log</div>
+    <div class="page-sub">Import exams from Powerscribe, then track your totals and ACGME progress.</div>
+
+    <div class="card">
+      <h2>Import Exams <span class="pill">paste or drop</span></h2>
+      <div class="import-grid">
+        <div>
+          <div class="dropzone" id="dropzone">
+            <div class="dz-icon">📋</div>
+            <div class="dz-main">Drag &amp; drop a file here</div>
+            <div class="dz-sub">.txt / .tsv / .csv exported from Powerscribe</div>
+          </div>
+        </div>
+        <div>
+          <textarea id="pasteZone" placeholder="Paste tab-separated rows copied from Powerscribe here..."></textarea>
+        </div>
+      </div>
+      <div class="import-actions">
+        <button class="btn-primary" id="importBtn">Import Pasted Data</button>
+        <button class="btn-secondary" id="clearPasteBtn">Clear Textarea</button>
+      </div>
+      <div id="importResult"></div>
+    </div>
+
+    <div class="card">
+      <h2>Summary</h2>
+      <div class="stat-grid" id="statGrid"></div>
+    </div>
+
+    <div class="card">
+      <h2>My Total Exams</h2>
+      <div class="table-scroll" id="totalExamsWrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>ACGME Requirements Progress</h2>
+      <div class="table-scroll" id="acgmeWrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>Manage Data</h2>
+      <button class="btn-danger" id="clearDataBtn">Clear My Data</button>
+    </div>
+  `;
+
+  // Drag & drop
+  const dz = document.getElementById("dropzone");
+  const paste = document.getElementById("pasteZone");
+  dz.addEventListener("click", ()=> paste.focus());
+  ["dragenter","dragover"].forEach(ev => dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.add("dragover"); }));
+  ["dragleave","drop"].forEach(ev => dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.remove("dragover"); }));
+  dz.addEventListener("drop", e=>{
+    const file = e.dataTransfer.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => doImport(reader.result);
+    reader.readAsText(file);
+  });
+
+  document.getElementById("importBtn").addEventListener("click", ()=>{
+    const txt = paste.value;
+    if(!txt.trim()){ showImportResult("warn","⚠️ Nothing to import — paste some rows first."); return; }
+    doImport(txt);
+    paste.value = "";
+  });
+  document.getElementById("clearPasteBtn").addEventListener("click", ()=> paste.value = "");
+  document.getElementById("clearDataBtn").addEventListener("click", confirmClearData);
+
+  refreshResidentTables();
+}
+
+function showImportResult(type, msg){
+  const wrap = document.getElementById("importResult");
+  if(!wrap) return;
+  wrap.innerHTML = `<div class="toast ${type}">${msg}</div>`;
+}
+
+function doImport(text){
+  const res = importForUser(currentUser.name, text);
+  if(res.parsedCount === 0){
+    showImportResult("err","❌ No valid rows found. Make sure the data is tab-separated and includes an Accession column.");
+    return;
+  }
+  let msg = `✅ Imported <strong>${res.added}</strong> new exam${res.added===1?"":"s"}.`;
+  if(res.duplicatesRemoved > 0){
+    msg += ` <strong>${res.duplicatesRemoved}</strong> duplicate${res.duplicatesRemoved===1?"":"s"} removed.`;
+  }
+  msg += ` Total exams: <strong>${res.totalAfter}</strong>.`;
+  showImportResult(res.duplicatesRemoved>0 ? "warn":"ok", msg);
+  refreshResidentTables();
+}
+
+function refreshResidentTables(){
+  const rows = getResidentData(currentUser.name);
+  const procMap = procedureCounts(rows);
+  const acg = acgmeCounts(rows);
+
+  // Summary stats
+  const uniqueProcs = Object.keys(procMap).length;
+  const metCount = ACGME.filter(c => acg[c.key] >= c.min).length;
+  document.getElementById("statGrid").innerHTML = `
+    <div class="stat"><div class="v">${rows.length}</div><div class="l">Total Exams</div></div>
+    <div class="stat"><div class="v">${uniqueProcs}</div><div class="l">Procedure Types</div></div>
+    <div class="stat"><div class="v">${metCount}/${ACGME.length}</div><div class="l">ACGME Met</div></div>
+  `;
+
+  // Total Exams table
+  const totalWrap = document.getElementById("totalExamsWrap");
+  if(rows.length === 0){
+    totalWrap.innerHTML = `<div class="empty">No exams imported yet.</div>`;
+  } else {
+    const sorted = Object.entries(procMap).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
+    totalWrap.innerHTML = `
+      <table>
+        <thead><tr><th>Procedure</th><th class="num">Count</th></tr></thead>
+        <tbody>
+          ${sorted.map(([p,c])=>`<tr><td>${esc(p)}</td><td class="num">${c}</td></tr>`).join("")}
+        </tbody>
+      </table>`;
+  }
+
+  // ACGME progress
+  const acgWrap = document.getElementById("acgmeWrap");
+  acgWrap.innerHTML = `
+    <table>
+      <thead><tr><th>Category</th><th class="num">Count</th><th class="num">Required</th><th class="progress-cell">Progress</th></tr></thead>
+      <tbody>
+        ${ACGME.map(c=>{
+          const count = acg[c.key];
+          const pct = Math.min(100, c.min===0?100:(count/c.min)*100);
+          const cls = statusClass(count, c.min);
+          return `<tr class="acgme-row">
+            <td>${esc(c.key)}</td>
+            <td class="num">${count}</td>
+            <td class="num">${c.min}</td>
+            <td class="progress-cell">
+              <div class="progress-track"><div class="progress-fill ${cls}" style="width:${pct}%"></div></div>
+              <div class="progress-label">${count} / ${c.min} (${Math.round(c.min===0?100:(count/c.min)*100)}%)</div>
+            </td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>`;
+}
+
+function confirmClearData(){
+  showModal({
+    title: "Clear My Data?",
+    body: "This will permanently delete all imported exams for your account. This cannot be undone.",
+    confirmText: "Clear Everything",
+    danger: true,
+    onConfirm: ()=>{
+      setResidentData(currentUser.name, []);
+      refreshResidentTables();
+      showImportResult("ok","✅ Your data has been cleared.");
+    }
+  });
+}
+
+/* ============================================================
+   DIRECTOR / COORDINATOR SCREEN
+   ============================================================ */
+function renderDirectorScreen(){
+  content.innerHTML = `
+    <div class="page-title">Program Overview</div>
+    <div class="page-sub">ACGME progress across all residents. Click a row to expand procedure details.</div>
+    <div class="card">
+      <h2>Resident Summary</h2>
+      <div class="legend">
+        <span><span class="dot green"></span> Requirement met</span>
+        <span><span class="dot yellow"></span> &gt; 50% of requirement</span>
+        <span><span class="dot red"></span> &lt; 50% of requirement</span>
+      </div>
+      <div class="table-scroll" id="dirWrap"></div>
+    </div>
+  `;
+
+  const wrap = document.getElementById("dirWrap");
+  const header = `
+    <tr>
+      <th>Resident</th>
+      <th class="num">Total</th>
+      ${ACGME.map(c=>`<th class="num" title="${esc(c.key)} (min ${c.min})">${esc(shortCat(c.key))}</th>`).join("")}
+    </tr>`;
+
+  const body = RESIDENTS.map((rname, idx)=>{
+    const rows = getResidentData(rname);
+    const acg = acgmeCounts(rows);
+    const cells = ACGME.map(c=>{
+      const count = acg[c.key];
+      const cls = c.min===0 ? "cell-met" : (count>=c.min ? "cell-met" : (count > c.min*0.5 ? "cell-mid" : "cell-low"));
+      return `<td class="cat-cell ${cls}">${count}/${c.min}</td>`;
+    }).join("");
+    return `
+      <tr class="resident-row" data-res="${idx}">
+        <td><span class="chev" id="chev-${idx}">▶</span>${esc(rname)}</td>
+        <td class="num">${rows.length}</td>
+        ${cells}
+      </tr>
+      <tr class="expand-row hidden" id="expand-${idx}">
+        <td colspan="${2+ACGME.length}"><div class="expand-inner" id="expand-inner-${idx}"></div></td>
+      </tr>`;
+  }).join("");
+
+  wrap.innerHTML = `<table><thead>${header}</thead><tbody>${body}</tbody></table>`;
+
+  wrap.querySelectorAll(".resident-row").forEach(tr=>{
+    tr.addEventListener("click", ()=> toggleResidentExpand(tr.dataset.res));
+  });
+}
+
+function shortCat(key){
+  // Compact column headers
+  const map = {
+    "Chest X-ray":"CXR", "CT Abd/Pel":"CT A/P", "CTA/MRA":"CTA/MRA", "Mammography":"Mammo",
+    "MRI Body":"MRI Body", "MRI Brain":"MRI Brain", "MRI Lower Extremity Joints":"MRI LE Jt",
+    "MRI Spine":"MRI Spine", "PET":"PET", "US Abd/Pel":"US A/P", "Image Guided Bx/Drainage":"Bx/Drain"
+  };
+  return map[key] || key;
+}
+
+function toggleResidentExpand(idx){
+  const row = document.getElementById("expand-"+idx);
+  const chev = document.getElementById("chev-"+idx);
+  const isHidden = row.classList.contains("hidden");
+  if(isHidden){
+    const rname = RESIDENTS[idx];
+    const rows = getResidentData(rname);
+    const procMap = procedureCounts(rows);
+    const inner = document.getElementById("expand-inner-"+idx);
+    if(rows.length === 0){
+      inner.innerHTML = `<div class="empty">No exams imported for ${esc(rname)}.</div>`;
+    } else {
+      const sorted = Object.entries(procMap).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
+      inner.innerHTML = `
+        <h3>${esc(rname)} — Procedure Breakdown (${rows.length} exams)</h3>
+        <table>
+          <thead><tr><th>Procedure</th><th class="num">Count</th></tr></thead>
+          <tbody>${sorted.map(([p,c])=>`<tr><td>${esc(p)}</td><td class="num">${c}</td></tr>`).join("")}</tbody>
+        </table>`;
+    }
+    row.classList.remove("hidden");
+    chev.classList.add("open");
+  } else {
+    row.classList.add("hidden");
+    chev.classList.remove("open");
+  }
+}
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+function showModal({title, body, confirmText="Confirm", danger=false, onConfirm}){
+  const mount = document.getElementById("modalMount");
+  mount.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>${esc(title)}</h3>
+        <p>${esc(body)}</p>
+        <div class="modal-actions">
+          <button class="btn-secondary" id="modalCancel">Cancel</button>
+          <button class="${danger?'btn-danger':'btn-primary'}" id="modalConfirm">${esc(confirmText)}</button>
+        </div>
+      </div>
+    </div>`;
+  const close = ()=> mount.innerHTML = "";
+  document.getElementById("modalCancel").addEventListener("click", close);
+  document.getElementById("modalConfirm").addEventListener("click", ()=>{ close(); onConfirm && onConfirm(); });
+  mount.querySelector(".modal-overlay").addEventListener("click", e=>{ if(e.target.classList.contains("modal-overlay")) close(); });
+}
+
+/* ============================================================
+   LOGIN / SESSION
+   ============================================================ */
+function initLogin(){
+  const sel = document.getElementById("userSelect");
+  const optGroups = [
+    { label:"Residents", names:RESIDENTS },
+    { label:"Administration", names:SPECIAL }
+  ];
+  sel.innerHTML = optGroups.map(g=>
+    `<optgroup label="${g.label}">${g.names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("")}</optgroup>`
+  ).join("");
+
+  const pin = document.getElementById("pinInput");
+  const err = document.getElementById("loginErr");
+  function attempt(){
+    const name = sel.value;
+    const user = USERS[name];
+    err.textContent = "";
+    if(!user){ err.textContent = "Unknown user."; return; }
+    if(pin.value !== user.pin){ err.textContent = "Incorrect PIN. (Hint: 1234)"; pin.value=""; pin.focus(); return; }
+    currentUser = user;
+    enterApp();
+  }
+  document.getElementById("loginBtn").addEventListener("click", attempt);
+  pin.addEventListener("keydown", e=>{ if(e.key==="Enter") attempt(); });
+  pin.addEventListener("input", ()=> pin.value = pin.value.replace(/\D/g,""));
+}
+
+function enterApp(){
+  document.getElementById("loginScreen").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  document.getElementById("hdrName").textContent = currentUser.name;
+  const roleLabel = currentUser.role === "resident" ? "" :
+    `(${currentUser.role.charAt(0).toUpperCase()+currentUser.role.slice(1)})`;
+  document.getElementById("hdrRole").textContent = roleLabel;
+
+  if(currentUser.role === "resident") renderResidentScreen();
+  else renderDirectorScreen();
+}
+
+function logout(){
+  currentUser = null;
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("loginScreen").classList.remove("hidden");
+  document.getElementById("pinInput").value = "";
+  document.getElementById("loginErr").textContent = "";
+  content.innerHTML = "";
+}
+
+document.getElementById("logoutBtn").addEventListener("click", logout);
+initLogin();
+</script>
+</body>
+</html>
