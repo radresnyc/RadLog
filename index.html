@@ -327,15 +327,45 @@ function statusClass(count, min){
 /* ============================================================
    IMPORT / PARSE
    ============================================================ */
+// Split one line into cells, honoring "quoted, fields" (CSV) and the given delimiter.
+function splitLine(line, delim){
+  const out = [];
+  let cur = "", inQ = false;
+  for(let i=0;i<line.length;i++){
+    const ch = line[i];
+    if(inQ){
+      if(ch === '"'){
+        if(line[i+1] === '"'){ cur += '"'; i++; }   // escaped quote
+        else inQ = false;
+      } else cur += ch;
+    } else {
+      if(ch === '"') inQ = true;
+      else if(ch === delim){ out.push(cur); cur = ""; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+// Guess whether the data is tab- or comma-separated by looking at the first non-empty line.
+function detectDelim(text){
+  const first = text.split(/\r?\n/).find(l => l.trim() !== "") || "";
+  const tabs = (first.match(/\t/g)||[]).length;
+  const commas = (first.match(/,/g)||[]).length;
+  return tabs >= commas ? "\t" : ",";
+}
+
 function parseRows(text){
-  const lines = text.split(/\r?\n/).map(l => l.replace(/\s+$/,"")).filter(l => l.trim() !== "");
+  const delim = detectDelim(text);
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
   const parsed = [];
   for(const line of lines){
-    const cells = line.split("\t");
-    if(cells.length < 2) continue; // not tab-separated, skip
-    const accession = (cells[COL.ACCESSION]||"").trim();
-    const procedure = (cells[COL.PROCEDURE]||"").trim();
-    const resident  = (cells[COL.RESIDENT]||"").trim();
+    const cells = splitLine(line, delim).map(c => c.trim());
+    if(cells.length < 2) continue; // not delimited, skip
+    const accession = cells[COL.ACCESSION] || "";
+    const procedure = cells[COL.PROCEDURE] || "";
+    const resident  = cells[COL.RESIDENT] || "";
     if(!accession) continue; // must have accession
     // skip a header row if present
     if(/^accession$/i.test(accession)) continue;
@@ -362,6 +392,53 @@ function importForUser(name, text){
   return { added, duplicatesRemoved, totalAfter: merged.length, parsedCount: incoming.length };
 }
 
+/* ---- File handling: route Excel files through SheetJS, text files read directly ---- */
+let _sheetJsPromise = null;
+function loadSheetJS(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(_sheetJsPromise) return _sheetJsPromise;
+  _sheetJsPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    s.onload = ()=> window.XLSX ? resolve(window.XLSX) : reject(new Error("XLSX failed to load"));
+    s.onerror = ()=> reject(new Error("offline"));
+    document.head.appendChild(s);
+  });
+  return _sheetJsPromise;
+}
+
+function handleFile(file){
+  const name = (file.name||"").toLowerCase();
+  const isExcel = /\.xlsx?$/.test(name) ||
+    /spreadsheetml|ms-excel/.test(file.type||"");
+
+  if(isExcel){
+    showImportResult("warn","⏳ Reading Excel file…");
+    loadSheetJS().then(XLSX=>{
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try {
+          const wb = XLSX.read(new Uint8Array(reader.result), { type:"array" });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          // Convert to tab-separated so it flows through the same parser
+          const tsv = XLSX.utils.sheet_to_csv(sheet, { FS:"\t" });
+          doImport(tsv);
+        } catch(err){
+          showImportResult("err","❌ Could not read that Excel file. Try \"Save As → CSV\" or copy the rows and paste them instead.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }).catch(()=>{
+      showImportResult("err","❌ Excel support needs an internet connection the first time. While offline, open the file in Excel and either copy/paste the rows or use \"Save As → CSV (Comma delimited)\".");
+    });
+  } else {
+    // Plain text / CSV / TSV
+    const reader = new FileReader();
+    reader.onload = ()=> doImport(reader.result);
+    reader.readAsText(file);
+  }
+}
+
 /* ============================================================
    RENDERING — shared
    ============================================================ */
@@ -384,9 +461,10 @@ function renderResidentScreen(){
         <div>
           <div class="dropzone" id="dropzone">
             <div class="dz-icon">📋</div>
-            <div class="dz-main">Drag &amp; drop a file here</div>
-            <div class="dz-sub">.txt / .tsv / .csv exported from Powerscribe</div>
+            <div class="dz-main">Drag &amp; drop a file, or click to browse</div>
+            <div class="dz-sub">Excel (.xlsx/.xls), .csv, .tsv or .txt from Powerscribe</div>
           </div>
+          <input type="file" id="fileInput" class="hidden" accept=".xlsx,.xls,.csv,.tsv,.txt,text/plain,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         </div>
         <div>
           <textarea id="pasteZone" placeholder="Paste tab-separated rows copied from Powerscribe here..."></textarea>
@@ -423,15 +501,18 @@ function renderResidentScreen(){
   // Drag & drop
   const dz = document.getElementById("dropzone");
   const paste = document.getElementById("pasteZone");
-  dz.addEventListener("click", ()=> paste.focus());
   ["dragenter","dragover"].forEach(ev => dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.add("dragover"); }));
   ["dragleave","drop"].forEach(ev => dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.remove("dragover"); }));
   dz.addEventListener("drop", e=>{
     const file = e.dataTransfer.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = () => doImport(reader.result);
-    reader.readAsText(file);
+    if(file) handleFile(file);
+  });
+  // Also allow clicking the zone to pick a file
+  const fileInput = document.getElementById("fileInput");
+  dz.addEventListener("click", ()=> fileInput.click());
+  fileInput.addEventListener("change", ()=>{
+    if(fileInput.files[0]) handleFile(fileInput.files[0]);
+    fileInput.value = "";
   });
 
   document.getElementById("importBtn").addEventListener("click", ()=>{
