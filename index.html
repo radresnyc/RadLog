@@ -159,6 +159,12 @@
 
   .empty { text-align: center; color: #9aa6b3; padding: 30px; font-size: 14px; }
 
+  .subhead { font-size: 13px; font-weight: 600; color: var(--gray); margin: 22px 0 8px; text-transform: uppercase; letter-spacing: .03em; }
+  .entry-scroll { max-height: 340px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .entry-scroll table { font-size: 13.5px; }
+  .entry-scroll thead th { position: sticky; top: 0; z-index: 1; }
+  .entry-scroll td.accession { font-variant-numeric: tabular-nums; color: var(--gray); white-space: nowrap; }
+
   /* Director cells */
   .cell-met { background: var(--green-bg); color: var(--green); font-weight: 600; }
   .cell-mid { background: var(--yellow-bg); color: var(--yellow); font-weight: 600; }
@@ -259,8 +265,8 @@ const ACGME = [
   { key:"Image Guided Bx/Drainage",    min:25,   matchers:["BIOPSY","BX","DRAINAGE","DRAIN","ASPIRATION","PARACENTESIS","THORACENTESIS","IMAGE GUIDED"] },
 ];
 
-// Column indices in the tab-separated Powerscribe data
-const COL = { ACCESSION:10, PROCEDURE:6, RESIDENT:13 };
+// The ONLY two columns we recognize. Located by header name (case-insensitive); everything else is ignored.
+const REQUIRED_COLS = { accession:"Accession", procedure:"Procedure" };
 
 /* ============================================================
    STORAGE
@@ -356,27 +362,43 @@ function detectDelim(text){
   return tabs >= commas ? "\t" : ",";
 }
 
+// Locate a column by header name: exact (case-insensitive) match preferred, else a header that contains the word.
+function findColIndex(headerCells, name){
+  const target = name.toLowerCase();
+  let idx = headerCells.findIndex(h => h === target);
+  if(idx !== -1) return idx;
+  return headerCells.findIndex(h => h.includes(target));
+}
+
+// Returns { error } if a required column is missing, otherwise { rows:[{accession, procedure}] }.
 function parseRows(text){
   const delim = detectDelim(text);
   const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
-  const parsed = [];
-  for(const line of lines){
-    const cells = splitLine(line, delim).map(c => c.trim());
-    if(cells.length < 2) continue; // not delimited, skip
-    const accession = cells[COL.ACCESSION] || "";
-    const procedure = cells[COL.PROCEDURE] || "";
-    const resident  = cells[COL.RESIDENT] || "";
-    if(!accession) continue; // must have accession
-    // skip a header row if present
-    if(/^accession$/i.test(accession)) continue;
-    parsed.push({ accession, procedure, resident, raw: cells });
+  if(lines.length === 0) return { error:"The file appears to be empty." };
+
+  const header = splitLine(lines[0], delim).map(c => c.trim().toLowerCase());
+  const accIdx  = findColIndex(header, REQUIRED_COLS.accession);
+  const procIdx = findColIndex(header, REQUIRED_COLS.procedure);
+  if(accIdx === -1)  return { error:"Error: Could not find an 'Accession' column." };
+  if(procIdx === -1) return { error:"Error: Could not find a 'Procedure' column." };
+
+  const rows = [];
+  for(let i = 1; i < lines.length; i++){
+    const cells = splitLine(lines[i], delim).map(c => c.trim());
+    const accession = cells[accIdx]  || "";
+    const procedure = cells[procIdx] || "";
+    if(!accession) continue; // skip rows with no accession
+    // Store ONLY these two fields — every other column is discarded here.
+    rows.push({ accession, procedure });
   }
-  return parsed;
+  return { rows };
 }
 
-// Returns {added, duplicatesRemoved, totalAfter}
+// Returns {error} if a column is missing, else {added, duplicatesRemoved, totalAfter, parsedCount}
 function importForUser(name, text){
-  const incoming = parseRows(text);
+  const result = parseRows(text);
+  if(result.error) return { error: result.error };
+  const incoming = result.rows;
   const existing = getResidentData(name);
   const seen = new Set(existing.map(r => r.accession));
   let duplicatesRemoved = 0;
@@ -484,7 +506,10 @@ function renderResidentScreen(){
 
     <div class="card">
       <h2>My Total Exams</h2>
+      <div class="subhead">Procedure Totals</div>
       <div class="table-scroll" id="totalExamsWrap"></div>
+      <div class="subhead">All Entries <span id="entryCount" style="text-transform:none;font-weight:400;color:#9aa6b3;"></span></div>
+      <div id="entryListWrap"></div>
     </div>
 
     <div class="card">
@@ -535,8 +560,12 @@ function showImportResult(type, msg){
 
 function doImport(text){
   const res = importForUser(currentUser.name, text);
+  if(res.error){
+    showImportResult("err","❌ " + res.error);
+    return;
+  }
   if(res.parsedCount === 0){
-    showImportResult("err","❌ No valid rows found. Make sure the data is tab-separated and includes an Accession column.");
+    showImportResult("err","❌ Found the 'Accession' and 'Procedure' columns, but no data rows beneath them.");
     return;
   }
   let msg = `✅ Imported <strong>${res.added}</strong> new exam${res.added===1?"":"s"}.`;
@@ -575,6 +604,28 @@ function refreshResidentTables(){
           ${sorted.map(([p,c])=>`<tr><td>${esc(p)}</td><td class="num">${c}</td></tr>`).join("")}
         </tbody>
       </table>`;
+  }
+
+  // All Entries — one row per exam, sorted alphabetically by Procedure (then Accession)
+  const entryWrap = document.getElementById("entryListWrap");
+  const entryCount = document.getElementById("entryCount");
+  if(rows.length === 0){
+    entryWrap.innerHTML = `<div class="empty">No entries yet.</div>`;
+    entryCount.textContent = "";
+  } else {
+    const sortedEntries = rows.slice().sort((a,b)=>
+      (a.procedure||"").localeCompare(b.procedure||"") || (a.accession||"").localeCompare(b.accession||"")
+    );
+    entryCount.textContent = `(${rows.length})`;
+    entryWrap.innerHTML = `
+      <div class="entry-scroll">
+        <table>
+          <thead><tr><th>Procedure</th><th class="accession">Accession</th></tr></thead>
+          <tbody>
+            ${sortedEntries.map(e=>`<tr><td>${esc(e.procedure||"(blank)")}</td><td class="accession">${esc(e.accession)}</td></tr>`).join("")}
+          </tbody>
+        </table>
+      </div>`;
   }
 
   // ACGME progress
