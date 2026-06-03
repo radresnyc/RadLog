@@ -164,6 +164,8 @@
   .entry-scroll table { font-size: 13.5px; }
   .entry-scroll thead th { position: sticky; top: 0; z-index: 1; }
   .entry-scroll td.accession { font-variant-numeric: tabular-nums; color: var(--gray); white-space: nowrap; }
+  .cat-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 20px; background: var(--blue-pale); color: var(--blue-light); white-space: nowrap; }
+  .cat-tag.cat-unmatched { background: #f0f1f3; color: #9aa6b3; }
 
   /* Director cells */
   .cell-met { background: var(--green-bg); color: var(--green); font-weight: 600; }
@@ -250,19 +252,47 @@ RESIDENTS.forEach(n => USERS[n] = { name:n, pin:"1234", role:"resident" });
 USERS["Program Director"]    = { name:"Program Director", pin:"1234", role:"director" };
 USERS["Program Coordinator"] = { name:"Program Coordinator", pin:"1234", role:"coordinator" };
 
-// ACGME requirements (order preserved). matchers = substrings (case-insensitive) that map a procedure to this category.
+// ACGME requirements (display order + minimums). Matching is driven by ACGME_RULES below.
 const ACGME = [
-  { key:"Chest X-ray",                 min:1900, matchers:["CHEST","CXR","XR CHEST"] },
-  { key:"CT Abd/Pel",                  min:600,  matchers:["CT ABD","CT ABDOMEN","ABD/PEL","ABDOMEN/PELVIS","ABDOMEN AND PELVIS","CT PELVIS"] },
-  { key:"CTA/MRA",                     min:100,  matchers:["CTA","MRA","ANGIOGRAM","ANGIOGRAPHY"] },
-  { key:"Mammography",                 min:300,  matchers:["MAMMO","MAMMOGRAM","BREAST","TOMOSYNTHESIS"] },
-  { key:"MRI Body",                    min:20,   matchers:["MRI ABDOMEN","MRI ABD","MRI PELVIS","MR ABDOMEN","MRI BODY","MR ENTEROGRAPHY","MRCP"] },
-  { key:"MRI Brain",                   min:110,  matchers:["MRI BRAIN","MR BRAIN","BRAIN MRI","MRI HEAD","MR HEAD"] },
-  { key:"MRI Lower Extremity Joints",  min:20,   matchers:["MRI KNEE","MRI ANKLE","MRI HIP","MRI FOOT","MRI LOWER EXTREMITY","MR KNEE","MR ANKLE","MR HIP"] },
-  { key:"MRI Spine",                   min:60,   matchers:["MRI SPINE","MR SPINE","MRI LUMBAR","MRI CERVICAL","MRI THORACIC","LUMBAR SPINE","CERVICAL SPINE"] },
-  { key:"PET",                         min:30,   matchers:["PET"] },
-  { key:"US Abd/Pel",                  min:350,  matchers:["US ABD","US ABDOMEN","ULTRASOUND ABD","US PELVIS","US PELVIC","RETROPERITONEAL US","ABDOMINAL ULTRASOUND"] },
-  { key:"Image Guided Bx/Drainage",    min:25,   matchers:["BIOPSY","BX","DRAINAGE","DRAIN","ASPIRATION","PARACENTESIS","THORACENTESIS","IMAGE GUIDED"] },
+  { key:"Chest X-ray",                 min:1900 },
+  { key:"CT Abd/Pel",                  min:600  },
+  { key:"CTA/MRA",                     min:100  },
+  { key:"Mammography",                 min:300  },
+  { key:"MRI Body",                    min:20   },
+  { key:"MRI Brain",                   min:110  },
+  { key:"MRI Lower Extremity Joints",  min:20   },
+  { key:"MRI Spine",                   min:60   },
+  { key:"PET",                         min:30   },
+  { key:"US Abd/Pel",                  min:350  },
+  { key:"Image Guided Bx/Drainage",    min:25   }, // no matching rule defined — will read 0 until a rule is added
+];
+
+// Ordered, mutually-exclusive matching rules. Evaluated top-to-bottom; the FIRST match wins (no double-counting).
+// Each test receives the procedure string already upper-cased. A procedure matching none is "Unmatched".
+const ACGME_RULES = [
+  { category:"Chest X-ray",
+    test: p => p.includes("CHEST") && p.includes("VIEW") },                                  // "VIEW" also covers "VIEWS"
+  { category:"CTA/MRA",
+    test: p => p.includes("CTA") || p.includes("MRA") || p.includes("CT ANGIO") || p.includes("MR ANGIO") },
+  { category:"CT Abd/Pel",
+    test: p => p.includes("CT") && !p.includes("CTA") &&
+               (p.includes("ABD/PEL") || p.includes("ABDOMEN") || p.includes("PELVIS")) },
+  { category:"Mammography",
+    test: p => p.includes("MAMMO") },                                                        // covers MAMMOGRAM / MAMMOGRAPHY
+  { category:"MRI Body",
+    test: p => p.includes("MR") && (p.includes("CHEST") || p.includes("ABDOMEN") || p.includes("PELVIS")) },
+  { category:"MRI Brain",
+    test: p => p.includes("MR") && p.includes("BRAIN") },
+  { category:"MRI Lower Extremity Joints",
+    test: p => p.includes("MR") && (p.includes("HIP") || p.includes("KNEE") || p.includes("ANKLE")) },
+  { category:"MRI Spine",
+    test: p => p.includes("MR") && (p.includes("THORACIC") || p.includes("CERVICAL") || p.includes("LUMBAR")) },
+  { category:"PET",
+    test: p => p.includes("PET") || p.includes("PSMA") || p.includes("PYLARIFY") },
+  { category:"US Abd/Pel",
+    test: p => p.includes("ULTRASOUND") &&
+               (p.includes("ABDOMEN") || p.includes("PELVIS") || p.includes("LIVER") || p.includes("RENAL") ||
+                p.includes("APPENDIX") || p.includes("GALLBLADDER") || p.includes("AORTA") || p.includes("ENDOVAGINAL")) },
 ];
 
 // The ONLY two columns we recognize. Located by header name (case-insensitive); everything else is ignored.
@@ -296,13 +326,13 @@ let currentUser = null;
 /* ============================================================
    ACGME / AGGREGATION HELPERS
    ============================================================ */
+// Returns exactly ONE category name (first rule that matches, in order) or "Unmatched".
 function categorize(procedure){
   const p = (procedure||"").toUpperCase();
-  const hits = [];
-  for(const cat of ACGME){
-    if(cat.matchers.some(m => p.includes(m))) hits.push(cat.key);
+  for(const rule of ACGME_RULES){
+    if(rule.test(p)) return rule.category;
   }
-  return hits; // a procedure may count toward multiple categories
+  return "Unmatched";
 }
 
 function procedureCounts(rows){
@@ -318,7 +348,8 @@ function acgmeCounts(rows){
   const counts = {};
   ACGME.forEach(c => counts[c.key] = 0);
   rows.forEach(r => {
-    categorize(r.procedure).forEach(k => counts[k]++);
+    const cat = categorize(r.procedure);
+    if(cat in counts) counts[cat]++; // "Unmatched" is ignored
   });
   return counts; // {categoryKey: count}
 }
@@ -620,9 +651,15 @@ function refreshResidentTables(){
     entryWrap.innerHTML = `
       <div class="entry-scroll">
         <table>
-          <thead><tr><th>Procedure</th><th class="accession">Accession</th></tr></thead>
+          <thead><tr><th>Procedure</th><th class="accession">Accession</th><th>ACGME Category</th></tr></thead>
           <tbody>
-            ${sortedEntries.map(e=>`<tr><td>${esc(e.procedure||"(blank)")}</td><td class="accession">${esc(e.accession)}</td></tr>`).join("")}
+            ${sortedEntries.map(e=>{
+              const cat = categorize(e.procedure);
+              const tag = cat === "Unmatched"
+                ? `<span class="cat-tag cat-unmatched">Unmatched</span>`
+                : `<span class="cat-tag">${esc(cat)}</span>`;
+              return `<tr><td>${esc(e.procedure||"(blank)")}</td><td class="accession">${esc(e.accession)}</td><td>${tag}</td></tr>`;
+            }).join("")}
           </tbody>
         </table>
       </div>`;
