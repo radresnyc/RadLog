@@ -264,7 +264,7 @@ const ACGME = [
   { key:"MRI Spine",                   min:60   },
   { key:"PET",                         min:30   },
   { key:"US Abd/Pel",                  min:350  },
-  { key:"Image Guided Bx/Drainage",    min:25   }, // no matching rule defined — will read 0 until a rule is added
+  { key:"Image Guided Bx/Drainage",    min:25   },
 ];
 
 // Ordered, mutually-exclusive matching rules. Evaluated top-to-bottom; the FIRST match wins (no double-counting).
@@ -275,8 +275,8 @@ const ACGME_RULES = [
   { category:"CTA/MRA",
     test: p => p.includes("CTA") || p.includes("MRA") || p.includes("CT ANGIO") || p.includes("MR ANGIO") },
   { category:"CT Abd/Pel",
-    test: p => p.includes("CT") && !p.includes("CTA") &&
-               (p.includes("ABD/PEL") || p.includes("ABDOMEN") || p.includes("PELVIS")) },
+    test: p => p.includes("CT") && !p.includes("CTA") && !p.includes("CT ANGIO") &&
+               (p.includes("ABD/PEL") || p.includes("ABD/ PELVIS") || p.includes("ABDOMEN") || p.includes("PELVIS")) },
   { category:"Mammography",
     test: p => p.includes("MAMMO") },                                                        // covers MAMMOGRAM / MAMMOGRAPHY
   { category:"MRI Body",
@@ -284,7 +284,7 @@ const ACGME_RULES = [
   { category:"MRI Brain",
     test: p => p.includes("MR") && p.includes("BRAIN") },
   { category:"MRI Lower Extremity Joints",
-    test: p => p.includes("MR") && (p.includes("HIP") || p.includes("KNEE") || p.includes("ANKLE")) },
+    test: p => p.includes("MR") && (p.includes("HIP") || p.includes("KNEE") || p.includes("ANKLE") || p.includes("LOWER EXTREMITY JOINT")) },
   { category:"MRI Spine",
     test: p => p.includes("MR") && (p.includes("THORACIC") || p.includes("CERVICAL") || p.includes("LUMBAR")) },
   { category:"PET",
@@ -293,6 +293,8 @@ const ACGME_RULES = [
     test: p => p.includes("ULTRASOUND") &&
                (p.includes("ABDOMEN") || p.includes("PELVIS") || p.includes("LIVER") || p.includes("RENAL") ||
                 p.includes("APPENDIX") || p.includes("GALLBLADDER") || p.includes("AORTA") || p.includes("ENDOVAGINAL")) },
+  { category:"Image Guided Bx/Drainage",
+    test: p => p.includes("BIOPSY") || p.includes("BX") || p.includes("DRAINAGE") },
 ];
 
 // The ONLY two columns we recognize. Located by header name (case-insensitive); everything else is ignored.
