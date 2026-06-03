@@ -297,7 +297,25 @@ const ACGME_RULES = [
     test: p => p.includes("BIOPSY") || p.includes("BX") || p.includes("DRAINAGE") },
 ];
 
-// The ONLY two columns we recognize. Located by header name (case-insensitive); everything else is ignored.
+// CPT-code → ACGME category. When a row has a (non-blank) CPT, this takes priority over the text rules above.
+const CPT_CODES = {
+  "Chest X-ray":                ["71045","71046","71047","71048"],
+  "CT Abd/Pel":                 ["72192","72193","72194","74150","74160","74170","74176","74177","74178"],
+  "CTA/MRA":                    ["70496","70498","70544","70545","70546","70547","70548","70549","71275","71555","72159","72191","72198","73206","73225","73706","73725","74174","74175","74185"],
+  "Mammography":                ["77061","77062","77065","77066","77067"],
+  "MRI Body":                   ["71550","71551","71552","72195","72196","72197","74181","74182","74183","74712","74713"],
+  "MRI Brain":                  ["70551","70552","70553"],
+  "MRI Lower Extremity Joints": ["73721","73722","73723"],
+  "MRI Spine":                  ["72141","72142","72146","72147","72148","72149","72156","72157","72158"],
+  "PET":                        ["78459","78491","78492","78608","78609","78811","78812","78813","78814","78815","78816"],
+  "US Abd/Pel":                 ["76700","76705","76706","76770","76775","76830","76856","76857"],
+  "Image Guided Bx/Drainage":   ["10005","10006","10007","10008","10009","10010","10011","10012","19081","19082","19083","19084","20206","20220","20225","32400","32405","32408","47000","47001","49180","50200","60100","62267","62269"],
+};
+// Reverse lookup: { "71045": "Chest X-ray", ... }
+const CPT_LOOKUP = {};
+Object.entries(CPT_CODES).forEach(([cat, codes]) => codes.forEach(code => CPT_LOOKUP[code] = cat));
+
+// Recognized columns. Accession + Procedure are required; CPT is optional. Everything else is ignored.
 const REQUIRED_COLS = { accession:"Accession", procedure:"Procedure" };
 
 /* ============================================================
@@ -337,6 +355,15 @@ function categorize(procedure){
   return "Unmatched";
 }
 
+// Categorize a stored row: if it has a non-blank CPT, match by CPT (skip text rules); otherwise fall back to text.
+function categorizeRow(row){
+  const cpt = (row.cpt || "").trim().replace(/\.0+$/, ""); // tolerate Excel turning "71045" into "71045.0"
+  if(cpt){
+    return CPT_LOOKUP[cpt] || "Unmatched"; // CPT present -> CPT decides, even if not in our table
+  }
+  return categorize(row.procedure);
+}
+
 function procedureCounts(rows){
   const map = {};
   rows.forEach(r => {
@@ -350,7 +377,7 @@ function acgmeCounts(rows){
   const counts = {};
   ACGME.forEach(c => counts[c.key] = 0);
   rows.forEach(r => {
-    const cat = categorize(r.procedure);
+    const cat = categorizeRow(r);
     if(cat in counts) counts[cat]++; // "Unmatched" is ignored
   });
   return counts; // {categoryKey: count}
@@ -412,6 +439,7 @@ function parseRows(text){
   const header = splitLine(lines[0], delim).map(c => c.trim().toLowerCase());
   const accIdx  = findColIndex(header, REQUIRED_COLS.accession);
   const procIdx = findColIndex(header, REQUIRED_COLS.procedure);
+  const cptIdx  = findColIndex(header, "CPT"); // optional — -1 if absent
   if(accIdx === -1)  return { error:"Error: Could not find an 'Accession' column." };
   if(procIdx === -1) return { error:"Error: Could not find a 'Procedure' column." };
 
@@ -420,9 +448,10 @@ function parseRows(text){
     const cells = splitLine(lines[i], delim).map(c => c.trim());
     const accession = cells[accIdx]  || "";
     const procedure = cells[procIdx] || "";
+    const cpt       = cptIdx !== -1 ? (cells[cptIdx] || "") : "";
     if(!accession) continue; // skip rows with no accession
-    // Store ONLY these two fields — every other column is discarded here.
-    rows.push({ accession, procedure });
+    // Store ONLY Accession, Procedure, and (if present) CPT — every other column is discarded here.
+    rows.push({ accession, procedure, cpt });
   }
   return { rows };
 }
@@ -540,7 +569,7 @@ function renderResidentScreen(){
     <div class="card">
       <h2>My Total Exams</h2>
       <div class="subhead">Procedure Totals</div>
-      <div class="table-scroll" id="totalExamsWrap"></div>
+      <div id="totalExamsWrap"></div>
       <div class="subhead">All Entries <span id="entryCount" style="text-transform:none;font-weight:400;color:#9aa6b3;"></span></div>
       <div id="entryListWrap"></div>
     </div>
@@ -631,12 +660,14 @@ function refreshResidentTables(){
   } else {
     const sorted = Object.entries(procMap).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
     totalWrap.innerHTML = `
-      <table>
-        <thead><tr><th>Procedure</th><th class="num">Count</th></tr></thead>
-        <tbody>
-          ${sorted.map(([p,c])=>`<tr><td>${esc(p)}</td><td class="num">${c}</td></tr>`).join("")}
-        </tbody>
-      </table>`;
+      <div class="entry-scroll">
+        <table>
+          <thead><tr><th>Procedure</th><th class="num">Count</th></tr></thead>
+          <tbody>
+            ${sorted.map(([p,c])=>`<tr><td>${esc(p)}</td><td class="num">${c}</td></tr>`).join("")}
+          </tbody>
+        </table>
+      </div>`;
   }
 
   // All Entries — one row per exam, sorted alphabetically by Procedure (then Accession)
@@ -656,7 +687,7 @@ function refreshResidentTables(){
           <thead><tr><th>Procedure</th><th class="accession">Accession</th><th>ACGME Category</th></tr></thead>
           <tbody>
             ${sortedEntries.map(e=>{
-              const cat = categorize(e.procedure);
+              const cat = categorizeRow(e);
               const tag = cat === "Unmatched"
                 ? `<span class="cat-tag cat-unmatched">Unmatched</span>`
                 : `<span class="cat-tag">${esc(cat)}</span>`;
