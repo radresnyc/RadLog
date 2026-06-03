@@ -355,8 +355,13 @@ function categorize(procedure){
   return "Unmatched";
 }
 
-// Categorize a stored row: if it has a non-blank CPT, match by CPT (skip text rules); otherwise fall back to text.
+// Categorize a stored row. Priority:
+//  1. A saved category (only present in files this app exported) — preserves backup/restore fidelity.
+//  2. A non-blank CPT — match by CPT, skipping text rules.
+//  3. Fall back to the text rules on the procedure name.
 function categorizeRow(row){
+  const saved = (row.category || "").trim();
+  if(saved) return saved;
   const cpt = (row.cpt || "").trim().replace(/\.0+$/, ""); // tolerate Excel turning "71045" into "71045.0"
   if(cpt){
     return CPT_LOOKUP[cpt] || "Unmatched"; // CPT present -> CPT decides, even if not in our table
@@ -439,7 +444,8 @@ function parseRows(text){
   const header = splitLine(lines[0], delim).map(c => c.trim().toLowerCase());
   const accIdx  = findColIndex(header, REQUIRED_COLS.accession);
   const procIdx = findColIndex(header, REQUIRED_COLS.procedure);
-  const cptIdx  = findColIndex(header, "CPT"); // optional — -1 if absent
+  const cptIdx  = findColIndex(header, "CPT");            // optional — -1 if absent
+  const catIdx  = findColIndex(header, "ACGME Category"); // optional — present in files exported by this app
   if(accIdx === -1)  return { error:"Error: Could not find an 'Accession' column." };
   if(procIdx === -1) return { error:"Error: Could not find a 'Procedure' column." };
 
@@ -449,9 +455,10 @@ function parseRows(text){
     const accession = cells[accIdx]  || "";
     const procedure = cells[procIdx] || "";
     const cpt       = cptIdx !== -1 ? (cells[cptIdx] || "") : "";
+    const category  = catIdx !== -1 ? (cells[catIdx] || "") : "";
     if(!accession) continue; // skip rows with no accession
-    // Store ONLY Accession, Procedure, and (if present) CPT — every other column is discarded here.
-    rows.push({ accession, procedure, cpt });
+    // Store Accession, Procedure, optional CPT, and (from our own exports) a saved ACGME Category. Other columns discarded.
+    rows.push({ accession, procedure, cpt, category });
   }
   return { rows };
 }
@@ -580,6 +587,17 @@ function renderResidentScreen(){
     </div>
 
     <div class="card">
+      <h2>Backup / Restore</h2>
+      <div class="page-sub" style="margin-bottom:14px;">Export your saved entries to a CSV file, or restore from a previously exported file. Importing merges with your existing data.</div>
+      <div class="import-actions">
+        <button class="btn-primary" id="exportBtn">⬇ Export My Data</button>
+        <button class="btn-secondary" id="importSavedBtn">⬆ Import Saved Data</button>
+        <input type="file" id="savedFileInput" class="hidden" accept=".csv,text/csv">
+      </div>
+      <div id="backupResult"></div>
+    </div>
+
+    <div class="card">
       <h2>Manage Data</h2>
       <button class="btn-danger" id="clearDataBtn">Clear My Data</button>
     </div>
@@ -611,7 +629,86 @@ function renderResidentScreen(){
   document.getElementById("clearPasteBtn").addEventListener("click", ()=> paste.value = "");
   document.getElementById("clearDataBtn").addEventListener("click", confirmClearData);
 
+  // Backup / Restore
+  document.getElementById("exportBtn").addEventListener("click", exportMyData);
+  const savedInput = document.getElementById("savedFileInput");
+  document.getElementById("importSavedBtn").addEventListener("click", ()=> savedInput.click());
+  savedInput.addEventListener("change", ()=>{
+    const file = savedInput.files[0];
+    if(file){
+      const reader = new FileReader();
+      reader.onload = ()=> importSavedData(reader.result);
+      reader.readAsText(file);
+    }
+    savedInput.value = "";
+  });
+
   refreshResidentTables();
+}
+
+function showBackupResult(type, msg){
+  const wrap = document.getElementById("backupResult");
+  if(!wrap) return;
+  wrap.innerHTML = `<div class="toast ${type}">${msg}</div>`;
+}
+
+// Wrap a CSV field: quote if it contains comma, quote, or newline; double internal quotes.
+function csvField(v){
+  const s = String(v == null ? "" : v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
+
+function todayStr(){
+  // Local date as YYYY-MM-DD
+  const d = new Date();
+  const pad = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+function exportMyData(){
+  const rows = getResidentData(currentUser.name);
+  if(rows.length === 0){
+    showBackupResult("warn","⚠️ You have no saved entries to export yet.");
+    return;
+  }
+  let suggested = `CaseLog_${todayStr()}`;
+  const input = prompt("Enter a filename for your export:", suggested);
+  if(input === null) return; // user cancelled
+  let fname = input.trim() || suggested;
+  if(!/\.csv$/i.test(fname)) fname += ".csv";
+
+  const header = "Accession,Procedure,ACGME Category";
+  const body = rows.map(r =>
+    [csvField(r.accession), csvField(r.procedure), csvField(categorizeRow(r))].join(",")
+  ).join("\r\n");
+  const csv = header + "\r\n" + body + "\r\n";
+
+  const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showBackupResult("ok", `✅ Exported <strong>${rows.length}</strong> entr${rows.length===1?"y":"ies"} to <strong>${esc(fname)}</strong>.`);
+}
+
+// Import a previously exported CSV (Accession, Procedure, ACGME Category).
+// Reuses importForUser so the merge + dedupe-by-accession logic is identical to the main import path.
+function importSavedData(text){
+  const res = importForUser(currentUser.name, text);
+  if(res.error){
+    showBackupResult("err","❌ " + res.error + " This doesn't look like a file exported by this app.");
+    return;
+  }
+  if(res.parsedCount === 0){
+    showBackupResult("err","❌ No entries found in that file.");
+    return;
+  }
+  refreshResidentTables();
+  const added = res.added, skipped = res.duplicatesRemoved;
+  let msg = `✅ Restore complete. <strong>${added}</strong> new entr${added===1?"y":"ies"} added`;
+  msg += `, <strong>${skipped}</strong> duplicate${skipped===1?"":"s"} skipped. Total: <strong>${res.totalAfter}</strong>.`;
+  showBackupResult(skipped>0 ? "warn" : "ok", msg);
 }
 
 function showImportResult(type, msg){
