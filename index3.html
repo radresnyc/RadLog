@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radiology Case Log Tracker</title>
+<style>
+  :root {
+    --blue: #1f4e79;
+    --blue-light: #2c6cad;
+    --blue-pale: #eaf2fb;
+    --gray: #5a6776;
+    --gray-light: #f4f6f9;
+    --border: #d8dee6;
+    --green: #2e9e5b;
+    --green-bg: #e3f5ea;
+    --yellow: #c8920a;
+    --yellow-bg: #fdf4dd;
+    --red: #c0392b;
+    --red-bg: #fbe6e3;
+    --shadow: 0 1px 3px rgba(31,78,121,.08), 0 1px 2px rgba(31,78,121,.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #f7f9fc;
+    color: #243140;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .hidden { display: none !important; }
+
+  /* Header */
+  header {
+    background: var(--blue);
+    color: #fff;
+    padding: 14px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow);
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header .brand { display: flex; align-items: center; gap: 11px; font-size: 19px; font-weight: 600; }
+  header .brand .logo {
+    width: 32px; height: 32px; border-radius: 7px; background: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  header .userbox { display: flex; align-items: center; gap: 14px; font-size: 14px; }
+  header .userbox .who { opacity: .92; }
+  header .userbox .who strong { font-weight: 600; }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    border-radius: 7px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background .15s, opacity .15s;
+  }
+  .btn-primary { background: var(--blue-light); color: #fff; padding: 10px 18px; }
+  .btn-primary:hover { background: var(--blue); }
+  .btn-ghost { background: rgba(255,255,255,.15); color: #fff; padding: 8px 14px; }
+  .btn-ghost:hover { background: rgba(255,255,255,.28); }
+  .btn-danger { background: var(--red); color: #fff; padding: 9px 16px; }
+  .btn-danger:hover { background: #a5301f; }
+  .btn-secondary { background: #e7ecf3; color: var(--blue); padding: 9px 16px; }
+  .btn-secondary:hover { background: #dae2ec; }
+
+  /* Login */
+  .login-wrap {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .login-card {
+    background: #fff; border-radius: 14px; box-shadow: 0 8px 30px rgba(31,78,121,.12);
+    padding: 38px 34px; width: 100%; max-width: 380px; text-align: center;
+  }
+  .login-card .logo-big {
+    width: 60px; height: 60px; border-radius: 14px; background: var(--blue-pale);
+    display: flex; align-items: center; justify-content: center; font-size: 32px; margin: 0 auto 16px;
+  }
+  .login-card h1 { font-size: 22px; color: var(--blue); margin-bottom: 4px; }
+  .login-card .sub { color: var(--gray); font-size: 14px; margin-bottom: 26px; }
+  .field { text-align: left; margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; color: var(--gray); margin-bottom: 6px; }
+  .field select, .field input {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 15px; font-family: inherit; background: #fff; color: #243140;
+  }
+  .field select:focus, .field input:focus { outline: none; border-color: var(--blue-light); box-shadow: 0 0 0 3px var(--blue-pale); }
+  .login-card .btn-primary { width: 100%; padding: 12px; margin-top: 6px; }
+  .login-err { color: var(--red); font-size: 13px; margin-top: 12px; min-height: 16px; }
+  .login-hint { color: #9aa6b3; font-size: 12px; margin-top: 18px; }
+
+  /* Layout */
+  main { max-width: 1180px; margin: 0 auto; padding: 26px 22px 60px; }
+  .page-title { font-size: 22px; color: var(--blue); margin-bottom: 4px; font-weight: 600; }
+  .page-sub { color: var(--gray); font-size: 14px; margin-bottom: 22px; }
+
+  .card {
+    background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 22px; margin-bottom: 22px;
+  }
+  .card h2 { font-size: 16px; color: var(--blue); margin-bottom: 16px; font-weight: 600; display:flex; align-items:center; gap:8px; }
+  .card h2 .pill { font-size: 12px; font-weight: 600; background: var(--blue-pale); color: var(--blue-light); padding: 2px 9px; border-radius: 20px; }
+
+  /* Import zones */
+  .import-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 720px) { .import-grid { grid-template-columns: 1fr; } }
+  .dropzone {
+    border: 2px dashed var(--border); border-radius: 10px; padding: 30px 18px; text-align: center;
+    color: var(--gray); background: var(--gray-light); transition: all .15s; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 150px;
+  }
+  .dropzone:hover { border-color: var(--blue-light); background: var(--blue-pale); }
+  .dropzone.dragover { border-color: var(--blue-light); background: var(--blue-pale); color: var(--blue); }
+  .dropzone .dz-icon { font-size: 30px; margin-bottom: 8px; }
+  .dropzone .dz-main { font-weight: 600; color: #34465a; }
+  .dropzone .dz-sub { font-size: 12.5px; margin-top: 4px; }
+  textarea#pasteZone {
+    width: 100%; min-height: 150px; border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; resize: vertical;
+  }
+  textarea#pasteZone:focus { outline: none; border-color: var(--blue-light); box-shadow: 0 0 0 3px var(--blue-pale); }
+  .import-actions { margin-top: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  .toast {
+    padding: 11px 15px; border-radius: 8px; font-size: 14px; margin-top: 14px;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .toast.ok { background: var(--green-bg); color: var(--green); }
+  .toast.warn { background: var(--yellow-bg); color: var(--yellow); }
+  .toast.err { background: var(--red-bg); color: var(--red); }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { color: var(--gray); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; background: var(--gray-light); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .table-scroll { overflow-x: auto; }
+
+  /* ACGME progress */
+  .acgme-row td { vertical-align: middle; }
+  .progress-cell { min-width: 200px; }
+  .progress-track { background: var(--gray-light); border-radius: 20px; height: 16px; overflow: hidden; border: 1px solid var(--border); }
+  .progress-fill { height: 100%; border-radius: 20px; transition: width .4s; }
+  .progress-fill.green { background: var(--green); }
+  .progress-fill.yellow { background: var(--yellow); }
+  .progress-fill.red { background: var(--red); }
+  .progress-label { font-size: 12.5px; color: var(--gray); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 14px; margin-bottom: 4px; }
+  .stat { background: var(--blue-pale); border-radius: 10px; padding: 16px; text-align: center; }
+  .stat .v { font-size: 26px; font-weight: 700; color: var(--blue); }
+  .stat .l { font-size: 12.5px; color: var(--gray); margin-top: 2px; }
+
+  .empty { text-align: center; color: #9aa6b3; padding: 30px; font-size: 14px; }
+
+  .subhead { font-size: 13px; font-weight: 600; color: var(--gray); margin: 22px 0 8px; text-transform: uppercase; letter-spacing: .03em; }
+  .entry-scroll { max-height: 340px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .entry-scroll table { font-size: 13.5px; }
+  .entry-scroll thead th { position: sticky; top: 0; z-index: 1; }
+  .entry-scroll td.accession { font-variant-numeric: tabular-nums; color: var(--gray); white-space: nowrap; }
+  .cat-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 20px; background: var(--blue-pale); color: var(--blue-light); white-space: nowrap; }
+  .cat-tag.cat-unmatched { background: #f0f1f3; color: #9aa6b3; }
+
+  /* Director cells */
+  .cell-met { background: var(--green-bg); color: var(--green); font-weight: 600; }
+  .cell-mid { background: var(--yellow-bg); color: var(--yellow); font-weight: 600; }
+  .cell-low { background: var(--red-bg); color: var(--red); font-weight: 600; }
+  td.cat-cell { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
+  tr.resident-row { cursor: pointer; }
+  tr.resident-row:hover td { background: var(--blue-pale); }
+  tr.resident-row td:first-child { font-weight: 600; color: var(--blue); }
+  .expand-row td { background: var(--gray-light); padding: 0; }
+  .expand-inner { padding: 18px 22px; }
+  .expand-inner h3 { font-size: 14px; color: var(--blue); margin-bottom: 10px; }
+  .chev { display: inline-block; transition: transform .15s; color: var(--gray); margin-right: 6px; }
+  .chev.open { transform: rotate(90deg); }
+
+  .legend { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px; font-size:12.5px; color:var(--gray); }
+  .legend span { display:flex; align-items:center; gap:6px; }
+  .legend .dot { width:12px; height:12px; border-radius:3px; display:inline-block; }
+  .dot.green{background:var(--green);} .dot.yellow{background:var(--yellow);} .dot.red{background:var(--red);}
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(20,35,55,.45); display: flex; align-items: center;
+    justify-content: center; padding: 20px; z-index: 100;
+  }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 26px; max-width: 400px; width: 100%;
+    box-shadow: 0 12px 40px rgba(0,0,0,.2);
+  }
+  .modal h3 { color: var(--blue); font-size: 18px; margin-bottom: 8px; }
+  .modal p { color: var(--gray); font-size: 14px; margin-bottom: 20px; }
+  .modal .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div class="logo-big">🩻</div>
+    <h1>Radiology Case Log</h1>
+    <div class="sub">Resident exam tracking &amp; ACGME progress</div>
+    <div class="field">
+      <label for="userSelect">Select your name</label>
+      <select id="userSelect"></select>
+    </div>
+    <div class="field">
+      <label for="pinInput">4-digit PIN</label>
+      <input type="password" id="pinInput" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off">
+    </div>
+    <button class="btn-primary" id="loginBtn">Sign In</button>
+    <div class="login-err" id="loginErr"></div>
+    <div class="login-hint">Demo: all PINs are <strong>1234</strong></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <div class="brand"><span class="logo">🩻</span> Radiology Case Log</div>
+    <div class="userbox">
+      <span class="who">Signed in as <strong id="hdrName"></strong> <span id="hdrRole"></span></span>
+      <button class="btn-ghost" id="logoutBtn">Sign Out</button>
+    </div>
+  </header>
+  <main id="content"></main>
+</div>
+
+<div id="modalMount"></div>
+
+<script>
+/* ============================================================
+    DATA MODEL
+   ============================================================ */
+const RESIDENTS = [
+  "Resident 1","Resident 2","Resident 3","Resident 4","Resident 5","Resident 6"
+];
+const SPECIAL = ["Program Director","Program Coordinator"];
+
+// Build users with default PIN 1234
+const USERS = {};
+RESIDENTS.forEach(n => USERS[n] = { name:n, pin:"1234", role:"resident" });
+USERS["Program Director"]    = { name:"Program Director", pin:"1234", role:"director" };
+USERS["Program Coordinator"] = { name:"Program Coordinator", pin:"1234", role:"coordinator" };
+
+// ACGME requirements (display order + minimums). Matching is driven by ACGME_RULES below.
+const ACGME = [
+  { key:"Chest X-ray",                 min:1900 },
+  { key:"CT Abd/Pel",                  min:600  },
+  { key:"CTA/MRA",                     min:100  },
+  { key:"Mammography",                 min:300  },
+  { key:"MRI Body",                    min:20   },
+  { key:"MRI Brain",                   min:110  },
+  { key:"MRI Lower Extremity Joints",  min:20   },
+  { key:"MRI Spine",                   min:60   },
+  { key:"PET",                         min:30   },
+  { key:"US Abd/Pel",                  min:350  },
+  { key:"Image Guided Bx/Drainage",    min:25   },
+];
+
+// Ordered, mutually-exclusive matching rules. Evaluated top-to-bottom; the FIRST match wins (no double-counting).
+// Each test receives the procedure string already upper-cased. A procedure matching none is "Unmatched".
+// NOTE ON MATCHING: Real-world Powerscribe procedure names abbreviate heavily and inconsistently.
+// Rules below use flexible sub-string searches to properly capture varying clinical system names.
+const ACGME_RULES = [
+  { category:"Chest X-ray",
+    test: p => p.includes("CHEST") && !p.includes("CT") && !p.includes("MR") },
+  { category:"CTA/MRA",
+    test: p => p.includes("CTA") || p.includes("MRA") || p.includes("ANGIO") },
+  { category:"Mammography",
+    test: p => p.includes("MAMMO") || p.includes("BREAST TOMO") || p.includes("SCREENING MG") },
+  { category:"MRI Brain",
+    test: p => p.includes("MR") && (p.includes("BRAIN") || p.includes("HEAD") || p.includes("IAC") || p.includes("ORBIT") || p.includes("PITUITARY")) },
+  { category:"MRI Lower Extremity Joints",
+    test: p => p.includes("MR") && (p.includes("HIP") || p.includes("KNEE") || p.includes("ANKLE") || p.includes("FOOT") || p.includes("LOWER EXT")) },
+  { category:"MRI Spine",
+    test: p => p.includes("MR") && (p.includes("SPINE") || p.includes("THORACIC") || p.includes("CERVICAL") || p.includes("LUMBAR") || p.includes("C-SPINE") || p.includes("T-SPINE") || p.includes("L-SPINE")) },
+  { category:"MRI Body",
+    test: p => p.includes("MR") && (p.includes("CHEST") || p.includes("ABD") || p.includes("PEL") || p.includes("LIVER") || p.includes("PROSTATE") || p.includes("RECTUM")) },
+  { category:"PET",
+    test: p => p.includes("PET") || p.includes("PSMA") || p.includes("PYLARIFY") },
+  { category:"Image Guided Bx/Drainage",
+    test: p => p.includes("BIOPSY") || /\bBX\b/.test(p) || p.includes("DRAIN") || p.includes("ASPIRAT") || p.includes("PARACENT") || p.includes("THORACENT") || p.includes("MARKER") },
+  { category:"US Abd/Pel",
+    test: p => (p.includes("US") || p.includes("ULTRASOUND") || p.includes("SONO") || p.includes("DUPLEX")) &&
+               (p.includes("ABD") || p.includes("PELV") || p.includes("LIVER") || p.includes("RENAL") || p.includes("KIDNEY") || p.includes("GALLBLADDER") || p.includes("RUQ") || p.includes("TRANSVAG")) },
+  { category:"CT Abd/Pel",
+    test: p => p.includes("CT") && (p.includes("ABD") || p.includes("PELV")) },
+];
+
+// CPT-code → ACGME category. When a row has a (non-blank) CPT, this takes priority over the text rules above.
+const CPT_CODES = {
+  "Chest X-ray":        ["71045","71046","71047","71048"],
+  "CT Abd/Pel":         ["72192","72193","72194","74150","74160","74170","74176","74177","74178"],
+  "CTA/MRA":            ["70496","70498","70544","70545","70546","70547","70548","70549","71275","71555","72159","72191","72198","73206","73225","73706","73725","74174","74175","74185"],
+  "Mammography":        ["77061","77062","77065","77066","77067"],
+  "MRI Body":           ["71550","71551","71552","72195","72196","72197","74181","74182","74183","74712","74713"],
+  "MRI Brain":          ["70551","70552","70553"],
+  "MRI Lower Extremity Joints": ["73721","73722","73723"],
+  "MRI Spine":          ["72141","72142","72146","72147","72148","72149","72156","72157","72158"],
+  "PET":                ["78459","78491","78492","78608","78609","78811","78812","78813","78814","78815","78816"],
+  "US Abd/Pel":         ["76700","76705","76706","76770","76775","76830","76856","76857"],
+  "Image Guided Bx/Drainage":   ["10005","10006","10007","10008","10009","10010","10011","10012","19081","19082","19083","19084","20206","20220","20225","32400","32405","32408","47000","47001","49180","50200","60100","62267","62269"],
+};
+// Reverse lookup: { "71045": "Chest X-ray", ... }
+const CPT_LOOKUP = {};
+Object.entries(CPT_CODES).forEach(([cat, codes]) => codes.forEach(code => CPT_LOOKUP[code] = cat));
+
+// Recognized columns. Accession + Procedure are required; CPT is optional. Everything else is ignored.
+const REQUIRED_COLS = { accession:"Accession", procedure:"Procedure" };
+
+/* ============================================================
+    STORAGE
+   ============================================================ */
+const STORE_KEY = "radCaseLog_v1";
+function loadStore() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+  catch(e){ return {}; }
+}
+function saveStore(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+// Per-resident data: store[residentName] = { rows: [ {accession, procedure, resident, raw:[...]} ] }
+function getResidentData(name){
+  const s = loadStore();
+  return (s[name] && s[name].rows) ? s[name].rows : [];
+}
+function setResidentData(name, rows){
+  const s = loadStore();
+  s[name] = { rows };
+  saveStore(s);
+}
+
+/* ============================================================
+    SESSION
+   ============================================================ */
+let currentUser = null;
+
+/* ============================================================
+    ACGME / AGGREGATION HELPERS
+   ============================================================ */
+// Returns exactly ONE category name (first rule that matches, in order) or "Unmatched".
+function categorize(procedure){
+  const p = (procedure||"").toUpperCase();
+  for(const rule of ACGME_RULES){
+    if(rule.test(p)) return rule.category;
+  }
+  return "Unmatched";
+}
+
+// Categorize a stored row. Priority:
+//  1. A saved category (only present in files this app exported) — preserves backup/restore fidelity.
+//  2. A non-blank CPT — match by CPT, skipping text rules.
+//  3. Fall back to the text rules on the procedure name.
+function categorizeRow(row){
+  const saved = (row.category || "").trim();
+  if(saved) return saved;
+  const cpt = (row.cpt || "").toString().trim().replace(/\.0+$/, ""); // tolerate Excel turning "71045" into "71045.0"
+  if(cpt){
+    return CPT_LOOKUP[cpt] || "Unmatched"; // CPT present -> CPT decides, even if not in our table
+  }
+  return categorize(row.procedure);
+}
+
+function procedureCounts(rows){
+  const map = {};
+  rows.forEach(r => {
+    const proc = r.procedure || "(blank)";
+    map[proc] = (map[proc]||0) + 1;
+  });
+  return map; // {procedure: count}
+}
+
+function acgmeCounts(rows){
+  const counts = {};
+  ACGME.forEach(c => counts[c.key] = 0);
+  rows.forEach(r => {
+    const cat = categorizeRow(r);
+    if(cat in counts) counts[cat]++; // "Unmatched" is ignored
+  });
+  return counts; // {categoryKey: count}
+}
+
+function statusClass(count, min){
+  const pct = min === 0 ? 100 : (count/min)*100;
+  if(pct >= 100) return "green";
+  if(pct > 50) return "yellow";
+  return "red";
+}
+
+/* ============================================================
+    IMPORT / PARSE
+   ============================================================ */
+// Split one line into cells, honoring "quoted, fields" (CSV) and the given delimiter.
+function splitLine(line, delim){
+  const out = [];
+  let cur = "", inQ = false;
+  for(let i=0;i<line.length;i++){
+    const ch = line[i];
+    if(inQ){
+      if(ch === '"'){
+        if(line[i+1] === '"'){ cur += '"'; i++; }   // escaped quote
+        else inQ = false;
+      } else cur += ch;
+    } else {
+      if(ch === '"') inQ = true;
+      else if(ch === delim){ out.push(cur); cur = ""; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+// Guess whether the data is tab- or comma-separated by looking at the first non-empty line.
+function detectDelim(text){
+  const sample = text.split(/\r?\n/).filter(l => l.trim()).slice(0,5);
+  const tabScore = sample.reduce((n,l)=>n+((l.match(/\t/g)||[]).length),0);
+  const commaScore = sample.reduce((n,l)=>n+((l.match(/,/g)||[]).length),0);
+  return tabScore >= commaScore ? "\t" : ",";
+}
+
+// Locate a column by header name: exact (case-insensitive) match preferred, else a header that contains the word.
+function findColIndex(headerCells, name){
+  const target = name.toLowerCase();
+  let idx = headerCells.findIndex(h => h === target);
+  if(idx !== -1) return idx;
+  return headerCells.findIndex(h => h.includes(target));
+}
+
+function normalizeAccession(acc){
+  return String(acc || "")
+    .trim()
+    .replace(/\.0+$/, "")
+    .replace(/^"+|"+$/g, "");
+}
+
+// Clean and sanitize incoming browser clipboard/file text strings to eliminate layout-breaking white-spaces
+function cleanCell(str) {
+  return (str || "")
+    .trim()
+    .replace(/[\u200B-\u200D\uFEFF]/g, "") // Wipe clean zero-width noise
+    .replace(/\u00A0/g, " ");             // Normalize non-breaking spaces
+}
+
+// Returns { error } if a required column is missing, otherwise { rows:[{accession, procedure}] }. 
+function parseRows(text){
+  const delim = detectDelim(text);
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+  if(lines.length === 0) return { error:"The file appears to be empty." };
+
+  const header = splitLine(lines[0], delim).map(c => cleanCell(c).toLowerCase());
+  const accIdx  = findColIndex(header, REQUIRED_COLS.accession);
+  const procIdx = findColIndex(header, REQUIRED_COLS.procedure);
+  const cptIdx  = findColIndex(header, "cpt");            // optional — -1 if absent
+  const catIdx  = findColIndex(header, "acgme category"); // optional — present in files exported by this app
+  if(accIdx === -1)  return { error:"Error: Could not find an 'Accession' column." };
+  if(procIdx === -1) return { error:"Error: Could not find a 'Procedure' column." };
+
+  const rows = [];
+  for(let i = 1; i < lines.length; i++){
+    const cells = splitLine(lines[i], delim).map(c => cleanCell(c));
+    const accession = normalizeAccession(cells[accIdx] || "");
+    const procedure = cells[procIdx] || "";
+    const cpt       = cptIdx !== -1 ? (cells[cptIdx] || "") : "";
+    const category  = catIdx !== -1 ? (cells[catIdx] || "") : "";
+    if(!accession) continue; // skip rows with no accession
+    rows.push({ accession, procedure, cpt, category });
+  }
+  return { rows };
+}
+
+// Returns {error} if a column is missing, else {added, duplicatesRemoved, totalAfter, parsedCount}
+function importForUser(name, text){
+  const result = parseRows(text);
+  if(result.error) return { error: result.error };
+  const incoming = result.rows;
+  const existing = getResidentData(name);
+  const seen = new Set(existing.map(r => normalizeAccession(r.accession)));
+  let duplicatesRemoved = 0;
+  let added = 0;
+  const merged = existing.slice();
+  for(const row of incoming){
+    const normAcc = normalizeAccession(row.accession);
+    if(seen.has(normAcc)){ duplicatesRemoved++; continue; }
+    seen.add(normAcc);
+    merged.push(row);
+    added++;
+  }
+  setResidentData(name, merged);
+  return { added, duplicatesRemoved, totalAfter: merged.length, parsedCount: incoming.length };
+}
+
+/* ---- File handling: route Excel files through SheetJS, text files read directly ---- */
+let _sheetJsPromise = null;
+function loadSheetJS(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(_sheetJsPromise) return _sheetJsPromise;
+  _sheetJsPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    s.onload = ()=> window.XLSX ? resolve(window.XLSX) : reject(new Error("XLSX failed to load"));
+    s.onerror = ()=> reject(new Error("offline"));
+    document.head.appendChild(s);
+  });
+  return _sheetJsPromise;
+}
+
+function handleFile(file){
+  const name = (file.name||"").toLowerCase();
+  const isExcel = /\.xlsx?$/.test(name) || /spreadsheetml|ms-excel/.test(file.type||"");
+
+  if(isExcel){
+    showImportResult("warn","⏳ Reading Excel file…");
+    loadSheetJS().then(XLSX=>{
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try {
+          const wb = XLSX.read(new Uint8Array(reader.result), { type:"array" });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const tsv = XLSX.utils.sheet_to_csv(sheet, { FS:"\t" });
+          doImport(tsv);
+        } catch(err){
+          showImportResult("err","❌ Could not read that Excel file. Try \"Save As → CSV\" or copy the rows and paste them instead.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }).catch(()=>{
+      showImportResult("err","❌ Excel support needs an internet connection the first time. While offline, open the file in Excel and either copy/paste the rows or use \"Save As → CSV (Comma delimited)\".");
+    });
+  } else {
+    const reader = new FileReader();
+    reader.onload = ()=> doImport(reader.result);
+    reader.readAsText(file);
+  }
+}
+
+function doImport(text){
+  const res = importForUser(currentUser.name, text);
+  if(res.error){
+    showImportResult("err", "❌ " + res.error);
+    return;
+  }
+  showImportResult("ok", `✅ Processed <strong>${res.parsedCount}</strong> rows: Added <strong>${res.added}</strong> new exams. Skipped <strong>${res.duplicatesRemoved}</strong> duplicates.`);
+  refreshResidentTables();
+}
+
+function showImportResult(type, msg){
+  const out = document.getElementById("importResult");
+  if(out) out.innerHTML = `<div class="toast ${type}">${msg}</div>`;
+}
+
+/* ============================================================
+    RENDERING — shared
+   ============================================================ */
+const content = document.getElementById("content");
+function el(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ============================================================
+    RESIDENT SCREEN
+   ============================================================ */
+function renderResidentScreen(){
+  const name = currentUser.name;
+  content.innerHTML = `
+    <div class="page-title">My Case Log</div>
+    <div class="page-sub">Import exams from Powerscribe, then track your totals and ACGME progress.</div>
+
+    <div class="card">
+      <h2>Import Exams <span class="pill">paste or drop</span></h2>
+      <div class="import-grid">
+        <div>
+          <div class="dropzone" id="dropzone">
+            <div class="dz-icon">📋</div>
+            <div class="dz-main">Drag &amp; drop a file, or click to browse</div>
+            <div class="dz-sub">Excel (.xlsx/.xls), .csv, .tsv or .txt from Powerscribe</div>
+          </div>
+          <input type="file" id="fileInput" class="hidden" accept=".xlsx,.xls,.csv,.tsv,.txt,text/plain,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        </div>
+        <div>
+          <textarea id="pasteZone" placeholder="Paste tab-separated rows copied from Powerscribe here..."></textarea>
+        </div>
+      </div>
+      <div class="import-actions">
+        <button class="btn-primary" id="importBtn">Import Pasted Data</button>
+        <button class="btn-secondary" id="clearPasteBtn">Clear Textarea</button>
+      </div>
+      <div id="importResult"></div>
+    </div>
+
+    <div class="card">
+      <h2>Summary</h2>
+      <div class="stat-grid" id="statGrid"></div>
+      <div id="unmatchedBanner"></div>
+    </div>
+
+    <div class="card">
+      <h2>My Total Exams</h2>
+      <div class="subhead">Procedure Totals</div>
+      <div id="totalExamsWrap"></div>
+      <div class="subhead">All Entries <span id="entryCount" style="text-transform:none;font-weight:400;color:#9aa6b3;"></span></div>
+      <div id="entryListWrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>ACGME Requirements Progress</h2>
+      <div class="table-scroll" id="acgmeWrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>Backup / Restore</h2>
+      <div class="page-sub" style="margin-bottom:14px;">Export your saved entries to a CSV file, or restore from a previously exported file. Importing merges with your existing data.</div>
+      <div class="import-actions">
+        <button class="btn-primary" id="exportBtn">⬇ Export My Data</button>
+        <button class="btn-secondary" id="importSavedBtn">⬆ Import Saved Data</button>
+        <input type="file" id="savedFileInput" class="hidden" accept=".csv,text/csv">
+      </div>
+      <div id="backupResult"></div>
+    </div>
+
+    <div class="card">
+      <h2>Manage Data</h2>
+      <button class="btn-danger" id="clearDataBtn">Clear My Data</button>
+    </div>
+  `;
+
+  // Drag & drop
+  const dz = document.getElementById("dropzone");
+  const paste = document.getElementById("pasteZone");
+  ["dragenter","dragover"].forEach(ev => dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.add("dragover"); }));
+  ["dragleave","drop"].forEach(ev => dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.remove("dragover"); }));
+  dz.addEventListener("drop", e=>{
+    const file = e.dataTransfer.files[0];
+    if(file) handleFile(file);
+  });
+  
+  const fileInput = document.getElementById("fileInput");
+  dz.addEventListener("click", ()=> fileInput.click());
+  fileInput.addEventListener("change", ()=>{
+    if(fileInput.files[0]) handleFile(fileInput.files[0]);
+    fileInput.value = "";
+  });
+
+  document.getElementById("importBtn").addEventListener("click", ()=>{
+    const txt = paste.value;
+    if(!txt.trim()){ showImportResult("warn","⚠️ Nothing to import — paste some rows first."); return; }
+    doImport(txt);
+    paste.value = "";
+  });
+  document.getElementById("clearPasteBtn").addEventListener("click", ()=> paste.value = "");
+  document.getElementById("clearDataBtn").addEventListener("click", confirmClearData);
+
+  document.getElementById("exportBtn").addEventListener("click", exportMyData);
+  const savedInput = document.getElementById("savedFileInput");
+  document.getElementById("importSavedBtn").addEventListener("click", ()=> savedInput.click());
+  savedInput.addEventListener("change", ()=>{
+    const file = savedInput.files[0];
+    if(file){
+      const reader = new FileReader();
+      reader.onload = ()=> importSavedData(reader.result);
+      reader.readAsText(file);
+    }
+    savedInput.value = "";
+  });
+
+  refreshResidentTables();
+}
+
+function showBackupResult(type, msg){
+  const wrap = document.getElementById("backupResult");
+  if(!wrap) return;
+  wrap.innerHTML = `<div class="toast ${type}">${msg}</div>`;
+}
+
+function csvField(v){
+  const s = String(v == null ? "" : v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
+
+function todayStr(){
+  const d = new Date();
+  const pad = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+function exportMyData(){
+  const rows = getResidentData(currentUser.name);
+  if(rows.length === 0){
+    showBackupResult("warn","⚠️ You have no saved entries to export yet.");
+    return;
+  }
+  let suggested = `CaseLog_${todayStr()}`;
+  const input = prompt("Enter a filename for your export:", suggested);
+  if(input === null) return; 
+  let fname = input.trim() || suggested;
+  if(!/\.csv$/i.test(fname)) fname += ".csv";
+
+  const header = "Accession,Procedure,CPT,ACGME Category";
+  const body = rows.map(r =>
+    [csvField(r.accession), csvField(r.procedure), csvField(r.cpt), csvField(categorizeRow(r))].join(",")
+  ).join("\r\n");
+  const csv = header + "\r\n" + body + "\r\n";
+
+  const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showBackupResult("ok", `✅ Exported <strong>${rows.length}</strong> entries to <strong>${esc(fname)}</strong>.`);
+}
+
+function importSavedData(text){
+  const res = importForUser(currentUser.name, text);
+  if(res.error){
+    showBackupResult("err","❌ " + res.error + " This doesn't look like a valid log backup file.");
+    return;
+  }
+  if(res.parsedCount === 0){
+    showBackupResult("err","❌ No entries found in that file.");
+    return;
+  }
+  showBackupResult("ok", `✅ Backup Restored! Successfully parsed ${res.parsedCount} entries (${res.added} updated/added).`);
+  refreshResidentTables();
+}
+
+function confirmClearData(){
+  const mount = document.getElementById("modalMount");
+  mount.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>Clear all logged exams?</h3>
+        <p>This will permanently erase your logged data records from this local browser cache. Make sure you have exported a backup file first if you want to keep them.</p>
+        <div class="modal-actions">
+          <button class="btn-secondary" id="modalCancel">Cancel</button>
+          <button class="btn-danger" id="modalConfirm">Delete Everything</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById("modalCancel").addEventListener("click", ()=> mount.innerHTML="");
+  document.getElementById("modalConfirm").addEventListener("click", ()=>{
+    setResidentData(currentUser.name, []);
+    mount.innerHTML = "";
+    refreshResidentTables();
+  });
+}
+
+function refreshResidentTables(){
+  const rows = getResidentData(currentUser.name);
+  
+  // Render Cards Stats Summary
+  const acgCounts = acgmeCounts(rows);
+  let completeCount = 0;
+  ACGME.forEach(c => { if(acgCounts[c.key] >= c.min) completeCount++; });
+  
+  document.getElementById("statGrid").innerHTML = `
+    <div class="stat"><div class="v">${rows.length}</div><div class="l">Total Exams</div></div>
+    <div class="stat"><div class="v">${completeCount} / ${ACGME.length}</div><div class="l">Requirements Met</div></div>
+  `;
+
+  // Unmatched warning banner — surfaces silent miscategorization instead of letting it hide in row-level tags
+  const unmatchedRows = rows.filter(r => categorizeRow(r) === "Unmatched");
+  const banner = document.getElementById("unmatchedBanner");
+  if(banner){
+    if(unmatchedRows.length > 0){
+      const unmatchedProcMap = procedureCounts(unmatchedRows);
+      const topUnmatched = Object.entries(unmatchedProcMap).sort((a,b)=>b[1]-a[1]).slice(0,8);
+      banner.innerHTML = `
+        <div class="toast warn" style="margin-top:14px; flex-direction:column; align-items:flex-start;">
+          <div>⚠️ <strong>${unmatchedRows.length}</strong> of your ${rows.length} exams didn't match any ACGME category and are <strong>not counted</strong> toward your progress below.</div>
+          <div style="margin-top:8px; font-size:13px; opacity:.9;">
+            Most common unmatched procedure names: ${topUnmatched.map(([p,c])=>`<strong>${esc(p)}</strong> (${c})`).join(", ")}
+          </div>
+          <div style="margin-top:6px; font-size:12.5px; opacity:.8;">
+            If these should count, the procedure naming doesn't match expected keywords — let your program coordinator or developer know so the matching rules can be updated.
+          </div>
+        </div>`;
+    } else {
+      banner.innerHTML = "";
+    }
+  }
+
+  // Render Procedure Totals
+  const procMap = procedureCounts(rows);
+  const totalExamsWrap = document.getElementById("totalExamsWrap");
+  if(Object.keys(procMap).length === 0){
+    totalExamsWrap.innerHTML = `<div class="empty">No procedures imported yet.</div>`;
+  } else {
+    let pHtml = `<table><thead><tr><th>Procedure Description</th><th class="num" style="width:100px;">Count</th></tr></thead><tbody>`;
+    Object.entries(procMap).sort((a,b)=>b[1]-a[1]).forEach(([p, count])=>{
+      pHtml += `<tr><td>${esc(p)}</td><td class="num">${count}</td></tr>`;
+    });
+    pHtml += `</tbody></table>`;
+    totalExamsWrap.innerHTML = `<div class="table-scroll" style="max-height:240px; overflow-y:auto; border:1px solid var(--border); border-radius:8px;">${pHtml}</div>`;
+  }
+
+  // Render Master Log Itemized list
+  document.getElementById("entryCount").textContent = `(${rows.length} total)`;
+  const entryWrap = document.getElementById("entryListWrap");
+  if(rows.length === 0){
+    entryWrap.innerHTML = `<div class="empty">No indexed entries found.</div>`;
+  } else {
+    let eHtml = `<div class="entry-scroll"><table><thead><tr><th>Accession</th><th>Procedure Description</th><th>CPT</th><th>ACGME Category</th></tr></thead><tbody>`;
+    rows.slice().reverse().forEach(r => {
+      const cat = categorizeRow(r);
+      const tagClass = cat === "Unmatched" ? "cat-tag cat-unmatched" : "cat-tag";
+      eHtml += `<tr>
+        <td class="accession">${esc(r.accession)}</td>
+        <td>${esc(r.procedure)}</td>
+        <td style="font-variant-numeric:tabular-nums; color:var(--gray);">${esc(r.cpt || "-")}</td>
+        <td><span class="${tagClass}">${esc(cat)}</span></td>
+      </tr>`;
+    });
+    eHtml += `</tbody></table></div>`;
+    entryWrap.innerHTML = eHtml;
+  }
+
+  // Render ACGME Progress Tables
+  let aHtml = `<table><thead><tr><th>Requirement Stream</th><th class="num">Logged</th><th class="num">Minimum</th><th style="width:240px;">Progress Breakdown</th></tr></thead><tbody>`;
+  ACGME.forEach(c => {
+    const count = acgCounts[c.key] || 0;
+    const cls = statusClass(count, c.min);
+    const pct = Math.min(100, c.min === 0 ? 100 : (count / c.min) * 100);
+    aHtml += `<tr class="acgme-row">
+      <td style="font-weight:600;">${esc(c.key)}</td>
+      <td class="num font-variant-numeric:tabular-nums">${count}</td>
+      <td class="num" style="color:var(--gray);">${c.min}</td>
+      <td class="progress-cell">
+        <div class="progress-track"><div class="progress-fill ${cls}" style="width:${pct}%;"></div></div>
+        <div class="progress-label">${Math.round(pct)}% Completed</div>
+      </td>
+    </tr>`;
+  });
+  aHtml += `</tbody></table>`;
+  document.getElementById("acgmeWrap").innerHTML = aHtml;
+}
+
+/* ============================================================
+    DIRECTOR SCREEN VIEW
+   ============================================================ */
+let expandedResident = null;
+
+function renderDirectorScreen(){
+  content.innerHTML = `
+    <div class="page-title">Program Management Dashboard</div>
+    <div class="page-sub">Aggregated overview monitoring ACGME standard tracking logs for all active residents.</div>
+    <div class="legend">
+      <span><span class="dot green"></span> Target Milestone Satisfied (100%)</span>
+      <span><span class="dot yellow"></span> Satisfactory Pace (&gt;50%)</span>
+      <span><span class="dot red"></span> Critical Target Deficiency (&lt;50%)</span>
+    </div>
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div class="table-scroll">
+        <table style="min-width:900px;">
+          <thead>
+            <tr>
+              <th>Resident</th>
+              <th class="num">Total</th>
+              ${ACGME.map(c => `<th class="num" style="font-size:11px; text-align:center; padding:10px 4px;">${esc(c.key.replace("MRI ","MR ").replace("Lower Extremity Joint","LE Joint"))}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody id="directorTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  refreshDirectorTable();
+}
+
+function refreshDirectorTable(){
+  const tbody = document.getElementById("directorTbody");
+  if(!tbody) return;
+  tbody.innerHTML = "";
+
+  RESIDENTS.forEach(name => {
+    const rows = getResidentData(name);
+    const counts = acgmeCounts(rows);
+    
+    const tr = el(`
+      <tr class="resident-row">
+        <td><span class="chev ${expandedResident===name?'open':''}">▶</span>${esc(name)}</td>
+        <td class="num" style="font-weight:bold; padding-right:16px;">${rows.length}</td>
+        ${ACGME.map(c => {
+          const count = counts[c.key] || 0;
+          const cls = statusClass(count, c.min);
+          let labelCls = "cell-low";
+          if(cls === "green") labelCls = "cell-met";
+          if(cls === "yellow") labelCls = "cell-mid";
+          return `<td class="cat-cell ${labelCls}">${count}</td>`;
+        }).join("")}
+      </tr>
+    `);
+    
+    tr.addEventListener("click", ()=>{
+      expandedResident = (expandedResident === name) ? null : name;
+      refreshDirectorTable();
+    });
+    tbody.appendChild(tr);
+
+    if(expandedResident === name){
+      const subRows = getResidentData(name);
+      const procMap = procedureCounts(subRows);
+      let pRowsHtml = "";
+      Object.entries(procMap).sort((a,b)=>b[1]-a[1]).slice(0,8).forEach(([proc,cnt])=>{
+        pRowsHtml += `<tr><td>${esc(proc)}</td><td class="num">${cnt}</td></tr>`;
+      });
+      if(!pRowsHtml) pRowsHtml = `<tr><td colspan="2" class="empty" style="padding:10px;">No historical dataset tracked for this account.</td></tr>`;
+
+      const expandTr = el(`
+        <tr class="expand-row">
+          <td colspan="${ACGME.length + 2}">
+            <div class="expand-inner">
+              <h3>Primary Distribution Breakdown for ${esc(name)}</h3>
+              <table style="max-width:600px; background:#fff; border:1px solid var(--border); border-radius:6px;">
+                <thead><tr><th>Procedure Description</th><th class="num" style="width:100px;">Counts</th></tr></thead>
+                <tbody>${pRowsHtml}</tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
+      `);
+      tbody.appendChild(expandTr);
+    }
+  });
+}
+
+/* ============================================================
+    INITIALIZATION AND LOGIN ROUTERS
+   ============================================================ */
+function initApp(){
+  const sel = document.getElementById("userSelect");
+  RESIDENTS.forEach(n => sel.appendChild(el(`<option value="${esc(n)}">${esc(n)}</option>`)));
+  SPECIAL.forEach(n => sel.appendChild(el(`<option value="${esc(n)}">${esc(n)}</option>`)));
+
+  const pin = document.getElementById("pinInput");
+  const err = document.getElementById("loginErr");
+  
+  function attempt(){
+    const name = sel.value;
+    const user = USERS[name];
+    err.textContent = "";
+    if(!user){ err.textContent = "Unknown user."; return; }
+    if(pin.value !== user.pin){ err.textContent = "Incorrect PIN. (Hint: 1234)"; pin.value=""; pin.focus(); return; }
+    currentUser = user;
+    enterApp();
+  }
+  
+  document.getElementById("loginBtn").addEventListener("click", attempt);
+  pin.addEventListener("keydown", e=>{ if(e.key==="Enter") attempt(); });
+  pin.addEventListener("input", ()=> pin.value = pin.value.replace(/\D/g,""));
+}
+
+function enterApp(){
+  document.getElementById("loginScreen").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  document.getElementById("hdrName").textContent = currentUser.name;
+  const roleLabel = currentUser.role === "resident" ? "" : `(${currentUser.role.charAt(0).toUpperCase()+currentUser.role.slice(1)})`;
+  document.getElementById("hdrRole").textContent = roleLabel;
+
+  if(currentUser.role === "resident") renderResidentScreen();
+  else renderDirectorScreen();
+}
+
+function logout(){
+  currentUser = null;
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("loginScreen").classList.remove("hidden");
+  document.getElementById("pinInput").value = "";
+  document.getElementById("loginErr").textContent = "";
+  content.innerHTML = "";
+}
+
+document.getElementById("logoutBtn").addEventListener("click", logout);
+initApp();
+</script>
+</body>
+</html>
